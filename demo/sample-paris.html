@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title>D3-Celestial - Ciel de Paris Aujourd'hui</title>
+  <script type="text/javascript" src="../lib/d3.min.js"></script>
+  <script type="text/javascript" src="../lib/d3.geo.projection.min.js"></script>
+  <script type="text/javascript" src="../celestial.min.js"></script>
+  <link rel="stylesheet" href="../celestial.css">
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      background-color: #000;
+      color: #fff;
+      font-family: Arial, sans-serif;
+    }
+    h1 {
+      text-align: center;
+      margin-bottom: 10px;
+    }
+    .info {
+      text-align: center;
+      margin-bottom: 20px;
+      color: #ccc;
+      font-size: 14px;
+    }
+    #celestial-map {
+      margin: 0 auto;
+    }
+  </style>
+</head>
+<body>
+  <h1>Ciel de Paris - Aujourd'hui</h1>
+  <div class="info">
+    Vue centrée sur le zénith depuis Paris | Constellations du zodiaque uniquement | Magnitude limitée à 6 | Zoom activé (molette de la souris)
+  </div>
+  <div style="overflow:hidden;"><div id="celestial-map"></div></div>
+
+  <script type="text/javascript">
+
+// Configuration pour une vue basée sur la localisation et la date
+var config = {
+  width: 0,              // Largeur par défaut (pleine largeur du parent)
+  projection: "airy",    // Projection Airy - vue centrée, moins déformée que Aitoff
+  transform: "equatorial", // Système de coordonnées équatorial
+  background: { fill: "#000000", stroke: "#ffffff", width: 5, opacity: 1 }, // Bordure blanche épaisse
+  
+  // Configuration pour carte interactive (zoom uniquement, pas de rotation)
+  adaptable: false,       // Désactive l'adaptation des tailles
+  interactive: true,      // Active le zoom (mais on désactivera la rotation)
+  disableAnimations: true, // Désactive les animations
+  form: false,            // Cache le formulaire de configuration
+  controls: true,         // Affiche les contrôles de zoom
+  follow: "zenith",       // Suit le zénith (point au-dessus de la tête)
+  
+  // Activation de la localisation et de la date
+  location: true,         // Active le système de localisation
+  geopos: [48.8566, 2.3522],  // Paris: latitude, longitude
+  formFields: {"location": false, "general": false, "stars": false, "dsos": false, 
+                "constellations": false, "lines": false, "other": false, download: false},
+  
+  container: "celestial-map",
+  datapath: "../data/",
+  lang: "fr",           // Langue française pour les noms
+  
+  stars: {
+    show: true,          // Affiche les étoiles
+    limit: 6,            // Étoiles de magnitude <= 6 (toutes les étoiles visibles à l'œil nu)
+    colors: true,        // Affiche les couleurs spectrales
+    style: { fill: "#ffffff", opacity: 1 },
+    names: false,        // Cache les noms d'étoiles
+    proper: false,       // Cache les noms propres d'étoiles (Aldébaran, Bételgeuse, etc.)
+    desig: false,        // Cache les désignations
+    namelimit: 2.5,      // Noms seulement pour magnitude <= 2.5
+    namestyle: { fill: "#ddddbb", font: "12px 'Palatino Linotype', Georgia, Times, serif", align: "left", baseline: "top" },
+    propernamestyle: { fill: "#ddddbb", font: "13px 'Palatino Linotype', Georgia, Times, serif", align: "right", baseline: "bottom" },
+    propernamelimit: 1.0, // Noms propres pour magnitude <= 1.0
+    size: 7,             // Taille des étoiles
+    exponent: -0.28,
+    data: "stars.6.json" // Fichier de données
+  },
+  
+  dsos: {
+    show: false,         // Cache les objets du ciel profond pour simplifier
+    limit: 6
+  },
+  
+  constellations: {
+    show: true,          // Affiche les constellations
+    names: true,         // Affiche les noms de constellations
+    namesType: "fr",     // Utilise les noms français
+    desig: false,         // Cache les désignations courtes (3 lettres)
+    namestyle: { fill: "#cccc99", align: "center", baseline: "middle", opacity: 0.8,
+                 font: ["bold 14px Helvetica, Arial, sans-serif",
+                        "bold 12px Helvetica, Arial, sans-serif",
+                        "bold 11px Helvetica, Arial, sans-serif"]},
+    lines: true,         // Affiche les lignes de constellations
+    linestyle: { stroke: "#cccccc", width: 2.5, opacity: 0.8 },
+    bounds: false       // Cache les limites de constellations
+  },
+  
+  mw: {
+    show: true,          // Affiche la Voie Lactée
+    style: { fill: "#ffffff", opacity: "0.15" }
+  },
+  
+  lines: {
+    graticule: { show: true, stroke: "#cccccc", width: 0.6, opacity: 0.8,
+      lon: {pos: ["center"], fill: "#eee", font: "10px Helvetica, Arial, sans-serif"},
+      lat: {pos: ["center"], fill: "#eee", font: "10px Helvetica, Arial, sans-serif"}},
+    equatorial: { show: true, stroke: "#aaaaaa", width: 1.3, opacity: 0.7 },
+    ecliptic: { show: true, stroke: "#66cc66", width: 1.3, opacity: 0.7 },
+    galactic: { show: false, stroke: "#cc6666", width: 1.3, opacity: 0.7 },
+    supergalactic: { show: false, stroke: "#cc66cc", width: 1.3, opacity: 0.7 }
+  }
+};
+
+// Initialiser la carte
+Celestial.display(config);
+
+// Désactiver la rotation (drag) tout en gardant le zoom (mousewheel)
+setTimeout(function() {
+  var canvas = d3.select("#celestial-map canvas");
+  if (canvas.node()) {
+    // Sauvegarder la rotation initiale
+    var fixedRotation = Celestial.mapProjection.rotate().slice();
+    
+    // Désactiver le drag (qui cause la rotation) mais garder le mousewheel
+    canvas.on("mousedown.zoom", null);
+    canvas.on("touchstart.zoom", null);
+    
+    // Intercepter les événements de zoom pour forcer la rotation à rester fixe
+    var originalZoom = canvas.on("zoom");
+    canvas.on("zoom", function() {
+      // Restaurer la rotation fixe après chaque zoom
+      Celestial.mapProjection.rotate(fixedRotation);
+      if (originalZoom) originalZoom.apply(this, arguments);
+    });
+  }
+  
+  // Ajouter un callback pour redessiner la bordure et les images de constellations
+  Celestial.add({
+    type: "raw",   // requis par Celestial.add (raw = pas de fichier, juste callback/redraw)
+    callback: function() { /* appelé au chargement, rien à faire */ },
+    redraw: function() {
+      console.log("redraw");
+      var canvas = d3.select("#celestial-map canvas");
+      if (!canvas.node()) return;
+      
+      var context = canvas.node().getContext("2d");
+      var metrics = Celestial.metrics();
+      var centerX = metrics.width / 2;
+      var centerY = metrics.height / 2;
+      var radius = Math.min(metrics.width, metrics.height) / 2;
+      
+      // Dessiner les images de fond des constellations
+      if (Celestial.constellations && Object.keys(constellationImageCache).length > 0) {
+        console.log("dessiner les images de fond des constellations");
+        context.save();
+        context.globalAlpha = 0.7; // Opacité des images (augmentée pour mieux voir)
+        
+        for (var constId in constellationImageCache) {
+          var img = constellationImageCache[constId];
+          if (!img) {
+            console.log("Image manquante pour:", constId);
+            continue;
+          }
+          if (!img.complete || img.naturalWidth === 0) {
+            console.log("Image pas encore chargée pour:", constId, "complete:", img.complete, "width:", img.naturalWidth);
+            continue; // Image pas encore chargée
+          }
+          
+          var constInfo = Celestial.constellations[constId];
+          if (!constInfo) {
+            console.log("Info constellation manquante pour:", constId, "Constellations disponibles:", Object.keys(Celestial.constellations || {}));
+            continue;
+          }
+          
+          // Obtenir les coordonnées du centre de la constellation
+          // constInfo.center est [longitude, latitude] en degrés
+          var centerCoords = constInfo.center;
+          if (!centerCoords || centerCoords.length < 2) {
+            console.log("Coordonnées invalides pour:", constId);
+            continue;
+          }
+          
+          // Vérifier si la constellation est visible (dans le champ de vue)
+          // Utiliser la fonction clip si disponible, sinon toujours afficher
+          var isVisible = true;
+          if (typeof Celestial.clip === 'function') {
+            isVisible = Celestial.clip(centerCoords);
+          }
+          if (!isVisible) {
+            console.log("Constellation hors champ pour:", constId);
+            continue;
+          }
+          
+          // Projeter les coordonnées sur le canvas
+          var projectedPoint = Celestial.mapProjection(centerCoords);
+          if (!projectedPoint || isNaN(projectedPoint[0]) || isNaN(projectedPoint[1])) {
+            console.log("Projection échouée pour:", constId, "coords:", centerCoords, "projected:", projectedPoint);
+            continue;
+          }
+          
+          // Calculer la taille de l'image basée sur l'échelle de la constellation
+          var imageSize = constInfo.scale ? constInfo.scale * 4 : 200; // Taille en pixels (augmentée)
+          var halfSize = imageSize / 2;
+          
+          console.log("✓ Dessin image pour:", constId, "à", projectedPoint, "taille:", imageSize, "img size:", img.width, "x", img.height);
+          
+          // Dessiner un rectangle de test pour vérifier la position
+          context.save();
+          context.strokeStyle = "#ff0000";
+          context.lineWidth = 2;
+          context.strokeRect(projectedPoint[0] - halfSize, projectedPoint[1] - halfSize, imageSize, imageSize);
+          context.restore();
+          
+          // Dessiner l'image centrée sur la constellation
+          try {
+            context.drawImage(
+              img,
+              projectedPoint[0] - halfSize,
+              projectedPoint[1] - halfSize,
+              imageSize,
+              imageSize
+            );
+            console.log("✓ Image dessinée avec succès pour", constId);
+          } catch (e) {
+            console.error("✗ Erreur lors du dessin de l'image pour", constId, ":", e);
+          }
+        }
+        
+        context.restore();
+      } else {
+        console.log("Pas d'images à dessiner. Constellations:", !!Celestial.constellations, "Cache:", Object.keys(constellationImageCache).length);
+      }
+      
+      // Dessiner la bordure blanche épaisse autour du cercle
+      context.save();
+      context.strokeStyle = "#ffffff";
+      context.lineWidth = 5;
+      context.beginPath();
+      context.arc(centerX, centerY, radius, 0, 2 * Math.PI);
+      context.stroke();
+      context.restore();
+    }
+  });
+  
+  // Redessiner pour afficher la bordure
+  Celestial.redraw();
+  
+  // Charger les images des constellations après un délai plus long
+  // pour s'assurer que les constellations sont chargées
+  setTimeout(function() {
+    console.log("Tentative de chargement des images. Constellations disponibles:", Object.keys(Celestial.constellations || {}));
+    loadConstellationImages();
+  }, 2000);
+}, 1000);
+
+// Liste des constellations du zodiaque (IDs)
+var zodiacConstellations = ["Ari", "Tau", "Gem", "Cnc", "Leo", "Vir", "Lib", "Sco", "Sgr", "Cap", "Aqr", "Psc"];
+
+// Mapping des images de fond pour les constellations
+// Format: { "ID_constellation": "chemin/vers/image.png" }
+// Les IDs des constellations sont les codes à 3 lettres (ex: "UMi" pour Petite Ourse, "Leo" pour Lion)
+// Pour les constellations du zodiaque: "Ari", "Tau", "Gem", "Cnc", "Leo", "Vir", "Lib", "Sco", "Sgr", "Cap", "Aqr", "Psc"
+var constellationImages = {
+  // Exemple d'utilisation (décommentez et adaptez avec vos images) :
+   "Leo": "images/lion.png",        // Lion
+  // "Vir": "images/vierge.png",      // Vierge
+  // "Sco": "images/scorpion.png",    // Scorpion
+   "UMi": "images/lion.png", // Petite Ourse (si vous affichez aussi les non-zodiaques)
+  // Ajoutez d'autres constellations ici avec leurs images respectives
+};
+
+// Charger les images des constellations
+var constellationImageCache = {};
+function loadConstellationImages() {
+  var loaded = 0;
+  var total = Object.keys(constellationImages).length;
+  
+  console.log("Chargement de", total, "images de constellations");
+  
+  if (total === 0) {
+    console.log("Aucune image à charger");
+    return; // Pas d'images à charger
+  }
+  
+  for (var constId in constellationImages) {
+    var img = new Image();
+    var imagePath = constellationImages[constId];
+    
+    img.onload = function(id, path) {
+      return function() {
+        console.log("Image chargée avec succès pour", id, ":", path);
+        loaded++;
+        if (loaded === total) {
+          console.log("Toutes les images sont chargées, redessin...");
+          // Toutes les images sont chargées, redessiner
+          Celestial.redraw();
+        }
+      };
+    }(constId, imagePath);
+    
+    img.onerror = function(id, path) {
+      return function() {
+        console.error("ERREUR: Impossible de charger l'image pour la constellation:", id, "chemin:", path);
+        loaded++;
+        if (loaded === total) {
+          Celestial.redraw();
+        }
+      };
+    }(constId, imagePath);
+    
+    console.log("Chargement de l'image pour", constId, ":", imagePath);
+    img.src = imagePath;
+    constellationImageCache[constId] = img;
+  }
+}
+
+// Filtrer les constellations pour n'afficher que celles du zodiaque
+setTimeout(function() {
+  // Filtrer les noms de constellations
+  d3.selectAll(".constname").each(function(d) {
+    if (d && d.id && zodiacConstellations.indexOf(d.id) === -1) {
+      d3.select(this).style("display", "none");
+    }
+  });
+  
+  // Filtrer les lignes de constellations
+  d3.selectAll(".constline").each(function(d) {
+    if (d && d.id && zodiacConstellations.indexOf(d.id) === -1) {
+      d3.select(this).style("display", "none");
+    }
+  });
+  
+  // Filtrer les limites de constellations
+  d3.selectAll(".boundaryline").each(function(d) {
+    if (d && d.id && zodiacConstellations.indexOf(d.id) === -1) {
+      d3.select(this).style("display", "none");
+    }
+  });
+}, 2500);
+
+// Configurer la date d'aujourd'hui après l'initialisation
+// Date d'aujourd'hui à 22h00 (heure locale pour voir les étoiles)
+setTimeout(function() {
+  var now = new Date();
+  // Ajuster à 22h00 pour une meilleure visibilité des étoiles
+  now.setHours(22, 0, 0, 0);
+  
+  // Mettre à jour la vue avec la date actuelle
+  // La localisation (Paris) est déjà configurée via geopos
+  Celestial.skyview({
+    "date": now
+  });
+}, 1000);
+
+  </script>
+
+</body>
+</html>
+
