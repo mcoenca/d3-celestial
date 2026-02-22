@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title>D3-Celestial - Éditeur de constellation</title>
+  <script type="text/javascript" src="../lib/d3.min.js"></script>
+  <script type="text/javascript" src="../lib/d3.geo.projection.min.js"></script>
+  <script type="text/javascript" src="../celestial.min.js"></script>
+  <link rel="stylesheet" href="../celestial.css">
+  <style>
+    body {
+      margin: 0;
+      padding: 16px;
+      background-color: #0a0a12;
+      color: #e0e0e0;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+    }
+    h1 {
+      text-align: center;
+      margin-bottom: 8px;
+      font-weight: 600;
+    }
+    .info {
+      text-align: center;
+      margin-bottom: 16px;
+      color: #888;
+      font-size: 13px;
+    }
+    #editor-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+      padding: 12px;
+      background: #151520;
+      border-radius: 8px;
+      border: 1px solid #2a2a3a;
+    }
+    #editor-toolbar label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    #editor-toolbar input[type="text"] {
+      padding: 6px 10px;
+      border: 1px solid #3a3a4a;
+      border-radius: 4px;
+      background: #1a1a24;
+      color: #e0e0e0;
+      width: 180px;
+    }
+    #editor-toolbar button {
+      padding: 8px 14px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 500;
+      transition: background 0.15s;
+    }
+    #editor-toolbar button.primary {
+      background: #3b82f6;
+      color: #fff;
+    }
+    #editor-toolbar button.primary:hover {
+      background: #2563eb;
+    }
+    #editor-toolbar button.secondary {
+      background: #374151;
+      color: #e0e0e0;
+    }
+    #editor-toolbar button.secondary:hover {
+      background: #4b5563;
+    }
+    #editor-toolbar button.danger {
+      background: #7f1d1d;
+      color: #fecaca;
+    }
+    #editor-toolbar button.danger:hover {
+      background: #991b1b;
+    }
+    #editor-toolbar .star-count {
+      color: #94a3b8;
+      font-size: 13px;
+    }
+    #celestial-map-wrapper {
+      position: relative;
+      margin: 0 auto;
+      display: inline-block;
+    }
+    #constellation-overlay {
+      position: absolute;
+      left: 0;
+      top: 0;
+      pointer-events: all;
+    }
+    #constellation-overlay .overlay-hit {
+      fill: transparent;
+      cursor: crosshair;
+    }
+    #constellation-overlay .star-circle {
+      fill: #fbbf24;
+      stroke: #f59e0b;
+      stroke-width: 2;
+      cursor: move;
+      pointer-events: all;
+    }
+    #constellation-overlay .star-circle:hover {
+      fill: #fcd34d;
+    }
+    #constellation-overlay .edit-line {
+      fill: none;
+      stroke: #a78bfa;
+      stroke-width: 2;
+      opacity: 0.9;
+      pointer-events: none;
+    }
+    .links {
+      text-align: center;
+      margin-top: 16px;
+    }
+    .links a {
+      color: #60a5fa;
+      text-decoration: none;
+    }
+    .links a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <h1>Éditeur de constellation</h1>
+  <div class="info">
+    Référence : Petite Ourse visible. Clic = ajouter une étoile · Glisser une étoile = la déplacer · Clic droit sur une étoile = la supprimer ainsi que toutes les suivantes. Les étoiles sont reliées dans l'ordre.
+  </div>
+
+  <div id="editor-toolbar">
+    <label>
+      Nom de la constellation :
+      <input type="text" id="constellation-name" placeholder="Ex: Mon triangle" />
+    </label>
+    <span class="star-count">Étoiles : <strong id="star-count">0</strong></span>
+    <button type="button" class="secondary" id="btn-remove-star">Supprimer la dernière étoile</button>
+    <button type="button" class="primary" id="btn-save">Sauvegarder</button>
+    <button type="button" class="secondary" id="btn-export">Exporter custom-stars.json</button>
+  </div>
+
+  <div id="celestial-map-wrapper">
+    <div id="celestial-map"></div>
+    <svg id="constellation-overlay" aria-hidden="true"></svg>
+  </div>
+
+  <div class="links">
+    <a href="sample-paris.html">← Retour au ciel de Paris</a>
+  </div>
+
+  <script type="text/javascript">
+
+  var STORAGE_KEY = "customConstellations";
+  var REFERENCE_CONST = "UMi"; // Petite Ourse
+
+  // État de l'éditeur : nom + liste de points [lon, lat] en degrés
+  var editorState = {
+    name: "",
+    stars: []
+  };
+  // Drag manuel : évite le conflit avec le clic (pas de nouveau point au release)
+  var dragState = { active: false, starIndex: -1, didMove: false };
+
+  // Configuration carte : centrée sur la Petite Ourse, même style que sample-paris
+  var config = {
+    width: 0,
+    projection: "airy",
+    transform: "equatorial",
+    background: { fill: "#000000", stroke: "#ffffff", width: 5, opacity: 1 },
+    adaptable: false,
+    interactive: true,
+    disableAnimations: true,
+    form: false,
+    controls: true,
+    follow: "zenith",
+    location: false,
+    formFields: {"location": false, "general": false, "stars": false, "dsos": false,
+                  "constellations": false, "lines": false, "other": false, download: false},
+    container: "celestial-map",
+    datapath: "../data/",
+    lang: "fr",
+    center: [-120, 78, 0],  // Centrer vers Petite Ourse (UMi)
+    zoomlevel: 2.2,        // Zoom pour bien voir la région
+    stars: {
+      show: true,
+      limit: 6,
+      colors: true,
+      style: { fill: "#ffffff", opacity: 1 },
+      names: false,
+      proper: false,
+      desig: false,
+      size: 7,
+      exponent: -0.28,
+      data: "stars.6.json"
+    },
+    dsos: { show: false },
+    constellations: {
+      show: true,
+      names: true,
+      namesType: "fr",
+      desig: false,
+      namestyle: { fill: "#cccc99", align: "center", baseline: "middle", opacity: 0.8,
+                   font: ["bold 14px Helvetica, Arial, sans-serif",
+                          "bold 12px Helvetica, Arial, sans-serif",
+                          "bold 11px Helvetica, Arial, sans-serif"]},
+      lines: true,
+      linestyle: { stroke: "#cccccc", width: 2.5, opacity: 0.8 },
+      bounds: false
+    },
+    mw: { show: true, style: { fill: "#ffffff", opacity: "0.15" } },
+    lines: {
+      graticule: { show: true, stroke: "#cccccc", width: 0.6, opacity: 0.8,
+        lon: { pos: ["center"], fill: "#eee", font: "10px Helvetica, Arial, sans-serif" },
+        lat: { pos: ["center"], fill: "#eee", font: "10px Helvetica, Arial, sans-serif" }},
+      equatorial: { show: true, stroke: "#aaaaaa", width: 1.3, opacity: 0.7 },
+      ecliptic: { show: true, stroke: "#66cc66", width: 1.3, opacity: 0.7 },
+      galactic: { show: false },
+      supergalactic: { show: false }
+    }
+  };
+
+  Celestial.display(config);
+
+  setTimeout(function() {
+    var canvas = d3.select("#celestial-map canvas");
+    if (canvas.node()) {
+      var fixedRotation = Celestial.mapProjection.rotate().slice();
+      canvas.on("mousedown.zoom", null);
+      canvas.on("touchstart.zoom", null);
+      var originalZoom = canvas.on("zoom");
+      canvas.on("zoom", function() {
+        Celestial.mapProjection.rotate(fixedRotation);
+        if (originalZoom) originalZoom.apply(this, arguments);
+      });
+    }
+
+    // Afficher uniquement la Petite Ourse (UMi) comme référence
+    setTimeout(function() {
+      d3.selectAll(".constname").each(function(d) {
+        if (d && d.id && d.id !== REFERENCE_CONST) d3.select(this).style("display", "none");
+      });
+      d3.selectAll(".constline").each(function(d) {
+        if (d && d.id && d.id !== REFERENCE_CONST) d3.select(this).style("display", "none");
+      });
+      d3.selectAll(".boundaryline").each(function(d) {
+        if (d && d.id && d.id !== REFERENCE_CONST) d3.select(this).style("display", "none");
+      });
+    }, 2500);
+
+    // Redraw : bordure + overlay des étoiles en édition
+    Celestial.add({
+      type: "raw",
+      callback: function() {},
+      redraw: function() {
+        var canvas = d3.select("#celestial-map canvas");
+        if (!canvas.node()) return;
+        var context = canvas.node().getContext("2d");
+        var metrics = Celestial.metrics();
+        var centerX = metrics.width / 2;
+        var centerY = metrics.height / 2;
+        var radius = Math.min(metrics.width, metrics.height) / 2;
+        context.save();
+        context.strokeStyle = "#ffffff";
+        context.lineWidth = 5;
+        context.beginPath();
+        context.arc(centerX, centerY, radius, 0, 2 * Math.PI);
+        context.stroke();
+        context.restore();
+        updateOverlay();
+      }
+    });
+
+    Celestial.redraw();
+  }, 1000);
+
+  function updateOverlay() {
+    var metrics = Celestial.metrics();
+    var w = metrics.width;
+    var h = metrics.height;
+    var mapDiv = document.getElementById("celestial-map");
+    var overlay = document.getElementById("constellation-overlay");
+    if (!overlay || !mapDiv) return;
+
+    overlay.setAttribute("width", w);
+    overlay.setAttribute("height", h);
+    overlay.setAttribute("viewBox", "0 0 " + w + " " + h);
+    overlay.style.width = mapDiv.offsetWidth + "px";
+    overlay.style.height = mapDiv.offsetHeight + "px";
+
+    var selG = d3.select(overlay).selectAll("g").data([null]);
+    selG.enter().append("g");
+    var g = d3.select(overlay).select("g");
+
+    // Rectangle transparent pour recevoir les clics (ajouter étoile), derrière les cercles
+    g.selectAll("rect.overlay-hit").data([null]).enter().append("rect").attr("class", "overlay-hit");
+    g.select("rect.overlay-hit").attr("width", w).attr("height", h).attr("x", 0).attr("y", 0).style("pointer-events", "all");
+
+    // Lignes entre étoiles consécutives
+    var lineCoords = [];
+    for (var i = 0; i < editorState.stars.length - 1; i++) {
+      var a = Celestial.mapProjection(editorState.stars[i]);
+      var b = Celestial.mapProjection(editorState.stars[i + 1]);
+      if (a && b && !isNaN(a[0]) && !isNaN(b[0])) {
+        lineCoords.push([a, b]);
+      }
+    }
+
+    g.selectAll("line").remove();
+    lineCoords.forEach(function(seg) {
+      g.append("line")
+        .attr("x1", seg[0][0])
+        .attr("y1", seg[0][1])
+        .attr("x2", seg[1][0])
+        .attr("y2", seg[1][1])
+        .attr("class", "edit-line")
+        .style("stroke", "#a78bfa")
+        .style("stroke-width", 2);
+    });
+
+    var stars = g.selectAll(".star-circle")
+      .data(editorState.stars, function(d, i) { return i; });
+    stars.exit().remove();
+    var starRadius = 8;
+    stars.enter()
+      .append("circle")
+      .attr("class", "star-circle")
+      .attr("r", starRadius);
+    // Positions + drag manuel (mousedown/mousemove/mouseup) + contextmenu
+    g.selectAll(".star-circle")
+      .attr("cx", function(d) {
+        var p = Celestial.mapProjection(d);
+        return p ? p[0] : 0;
+      })
+      .attr("cy", function(d) {
+        var p = Celestial.mapProjection(d);
+        return p ? p[1] : 0;
+      })
+      .on("mousedown", function(d, i) {
+        var ev = d3.event;
+        ev.stopPropagation();
+        ev.preventDefault();
+        var circleEl = this;
+        dragState.active = true;
+        dragState.starIndex = i;
+        dragState.didMove = false;
+        var moveHandler = function(e) {
+          if (!dragState.active) return;
+          dragState.didMove = true;
+          var xy = getOverlayXY(e);
+          if (!xy) return;
+          var inv = Celestial.mapProjection.invert(xy);
+          if (inv && !isNaN(inv[0])) {
+            editorState.stars[dragState.starIndex] = inv;
+            d3.select(circleEl).attr("cx", xy[0]).attr("cy", xy[1]);
+            redrawOverlayLines(g);
+          }
+        };
+        var upHandler = function() {
+          dragState.active = false;
+          document.removeEventListener("mousemove", moveHandler);
+          document.removeEventListener("mouseup", upHandler);
+          Celestial.redraw();
+        };
+        document.addEventListener("mousemove", moveHandler);
+        document.addEventListener("mouseup", upHandler);
+      })
+      .on("contextmenu", function(d, i) {
+        d3.event.preventDefault();
+        editorState.stars.splice(i, editorState.stars.length - i);
+        Celestial.redraw();
+      });
+
+    function redrawOverlayLines(grp) {
+      grp.selectAll("line").remove();
+      for (var i = 0; i < editorState.stars.length - 1; i++) {
+        var a = Celestial.mapProjection(editorState.stars[i]);
+        var b = Celestial.mapProjection(editorState.stars[i + 1]);
+        if (a && b && !isNaN(a[0])) {
+          grp.append("line")
+            .attr("x1", a[0]).attr("y1", a[1])
+            .attr("x2", b[0]).attr("y2", b[1])
+            .attr("class", "edit-line")
+            .style("stroke", "#a78bfa")
+            .style("stroke-width", 2);
+        }
+      }
+    }
+
+    document.getElementById("star-count").textContent = editorState.stars.length;
+  }
+
+  function getOverlayXY(event) {
+    var overlay = document.getElementById("constellation-overlay");
+    if (!overlay) return null;
+    var rect = overlay.getBoundingClientRect();
+    var x = event.clientX - rect.left;
+    var y = event.clientY - rect.top;
+    var w = parseFloat(overlay.getAttribute("width"));
+    var h = parseFloat(overlay.getAttribute("height"));
+    var scaleX = w / rect.width;
+    var scaleY = h / rect.height;
+    return [x * scaleX, y * scaleY];
+  }
+
+  // Clic sur l'overlay (zone vide) = ajouter une étoile. Ne pas ajouter si on vient de lâcher un drag.
+  d3.select("#constellation-overlay").on("click", function() {
+    var ev = d3.event;
+    if (dragState.didMove) {
+      dragState.didMove = false;
+      return;
+    }
+    if (ev.target && ev.target.classList && ev.target.classList.contains("star-circle")) return;
+    var xy = getOverlayXY(ev);
+    if (!xy) return;
+    var inv = Celestial.mapProjection.invert(xy);
+    if (inv && !isNaN(inv[0])) {
+      editorState.stars.push(inv);
+      Celestial.redraw();
+    }
+  });
+
+  document.getElementById("constellation-name").addEventListener("input", function() {
+    editorState.name = this.value.trim();
+  });
+
+  document.getElementById("btn-remove-star").addEventListener("click", function() {
+    if (editorState.stars.length) {
+      editorState.stars.pop();
+      Celestial.redraw();
+    }
+  });
+
+  function buildFeature() {
+    var name = editorState.name || "Sans nom";
+    var stars = editorState.stars;
+    if (stars.length < 2) return null;
+    var coords = [];
+    for (var i = 0; i < stars.length - 1; i++) {
+      coords.push([stars[i], stars[i + 1]]);
+    }
+    var centerLon = stars.reduce(function(s, p) { return s + p[0]; }, 0) / stars.length;
+    var centerLat = stars.reduce(function(s, p) { return s + p[1]; }, 0) / stars.length;
+    var id = "custom-" + (name.replace(/\s+/g, "-").toLowerCase() || "constellation") + "-" + Date.now();
+    return {
+      type: "Feature",
+      id: id,
+      properties: { n: name, fr: name, loc: [centerLon, centerLat] },
+      geometry: { type: "MultiLineString", coordinates: coords }
+    };
+  }
+
+  document.getElementById("btn-save").addEventListener("click", function() {
+    var feature = buildFeature();
+    if (!feature) {
+      alert("Ajoutez au moins 2 étoiles et donnez un nom pour sauvegarder.");
+      return;
+    }
+    var list = [];
+    try {
+      var raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) list = JSON.parse(raw);
+    } catch (e) {}
+    list.push(feature);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+    alert("Constellation « " + feature.properties.n + " » sauvegardée dans le navigateur.");
+  });
+
+  document.getElementById("btn-export").addEventListener("click", function() {
+    var list = [];
+    try {
+      var raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) list = JSON.parse(raw);
+    } catch (e) {}
+    var blob = new Blob([JSON.stringify({ constellations: list }, null, 2)], { type: "application/json" });
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "custom-stars.json";
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
+
+  </script>
+</body>
+</html>

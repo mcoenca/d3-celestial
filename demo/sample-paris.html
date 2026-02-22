@@ -34,8 +34,17 @@
   <h1>Ciel de Paris - Aujourd'hui</h1>
   <div class="info">
     Vue centrée sur le zénith depuis Paris | Constellations du zodiaque uniquement | Magnitude limitée à 6 | Zoom activé (molette de la souris)
+    | <a href="constellation-editor.html" style="color:#93c5fd;">Créer une constellation</a>
   </div>
   <div style="overflow:hidden;"><div id="celestial-map"></div></div>
+
+  <div id="celestial-params" style="margin-top:16px; padding:12px; background:#1a1a1a; border-radius:8px; max-width:600px; margin-left:auto; margin-right:auto;">
+    <label style="display:inline-flex; align-items:center; gap:8px; cursor:pointer;">
+      <input type="checkbox" id="debug-constellation-images" />
+      <span>Debug</span>
+    </label>
+    <span style="color:#888; font-size:12px; margin-left:8px;">— boîte image (orange) et direction prioritaire</span>
+  </div>
 
   <script type="text/javascript">
 
@@ -116,6 +125,57 @@ var config = {
   }
 };
 
+// Clé localStorage et chargement des constellations personnalisées
+var CUSTOM_STORAGE_KEY = "customConstellations";
+var customConstList = [];
+
+function getCustomConstellations() {
+  try {
+    var raw = localStorage.getItem(CUSTOM_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function mergeCustomConstellationsFromFile(listFromFile) {
+  if (!listFromFile || !listFromFile.length) return;
+  var list = getCustomConstellations();
+  list = list.concat(listFromFile);
+  localStorage.setItem(CUSTOM_STORAGE_KEY, JSON.stringify(list));
+  customConstList = list;
+}
+
+function addCustomConstellationsToMap() {
+  customConstList = getCustomConstellations();
+  if (customConstList.length === 0) return;
+  var fc = { type: "FeatureCollection", features: customConstList };
+  var transformed = Celestial.getData(fc, config.transform);
+  Celestial.container.selectAll(".custom-const").remove();
+  Celestial.container.selectAll(".custom-const")
+    .data(transformed.features)
+    .enter().append("path")
+    .attr("class", "custom-const");
+  Celestial.redraw();
+}
+
+// Charger config/custom-stars.json au démarrage et fusionner dans localStorage
+fetch("../config/custom-stars.json")
+  .then(function(r) { return r.ok ? r.json() : null; })
+  .then(function(data) {
+    if (data && data.constellations && data.constellations.length) {
+      mergeCustomConstellationsFromFile(data.constellations);
+    }
+  })
+  .catch(function() {})
+  .then(function() {
+    customConstList = getCustomConstellations();
+    // Rafraîchir la carte une fois Celestial prêt (voir setTimeout plus bas)
+    if (typeof addCustomConstellationsToMap === "function") {
+      setTimeout(addCustomConstellationsToMap, 600);
+    }
+  });
+
 // Initialiser la carte
 Celestial.display(config);
 
@@ -144,7 +204,6 @@ setTimeout(function() {
     type: "raw",   // requis par Celestial.add (raw = pas de fichier, juste callback/redraw)
     callback: function() { /* appelé au chargement, rien à faire */ },
     redraw: function() {
-      console.log("redraw");
       var canvas = d3.select("#celestial-map canvas");
       if (!canvas.node()) return;
       
@@ -156,7 +215,6 @@ setTimeout(function() {
       
       // Dessiner les images de fond des constellations
       if (Celestial.constellations && Object.keys(constellationImageCache).length > 0) {
-        console.log("dessiner les images de fond des constellations");
         context.save();
         context.globalAlpha = 0.7; // Opacité des images (augmentée pour mieux voir)
         
@@ -196,44 +254,85 @@ setTimeout(function() {
             continue;
           }
           
-          // Projeter les coordonnées sur le canvas
-          var projectedPoint = Celestial.mapProjection(centerCoords);
-          if (!projectedPoint || isNaN(projectedPoint[0]) || isNaN(projectedPoint[1])) {
-            console.log("Projection échouée pour:", constId, "coords:", centerCoords, "projected:", projectedPoint);
-            continue;
+          // Calculer la bbox en pixels des lignes de la constellation pour adapter la taille de l'image
+          var extent = null;
+          d3.select("#celestial-map").selectAll(".constline").each(function(d) {
+            if (!d || d.id !== constId || !d.geometry || !d.geometry.coordinates) return;
+            var coords = d.geometry.coordinates; // MultiLineString: [[[lon,lat],...], ...]
+            var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            for (var i = 0; i < coords.length; i++) {
+              for (var j = 0; j < coords[i].length; j++) {
+                var pt = Celestial.mapProjection(coords[i][j]);
+                if (pt && !isNaN(pt[0]) && !isNaN(pt[1])) {
+                  if (pt[0] < minX) minX = pt[0];
+                  if (pt[1] < minY) minY = pt[1];
+                  if (pt[0] > maxX) maxX = pt[0];
+                  if (pt[1] > maxY) maxY = pt[1];
+                }
+              }
+            }
+            if (minX !== Infinity) {
+              var w = maxX - minX, h = maxY - minY;
+              var padding = 15; // marge autour de la constellation
+              extent = {
+                minX: minX, minY: minY, maxX: maxX, maxY: maxY,
+                width: w + padding * 2,
+                height: h + padding * 2,
+                centerX: (minX + maxX) / 2,
+                centerY: (minY + maxY) / 2
+              };
+            }
+          });
+          
+          var imageSize, centerX_img, centerY_img;
+          if (extent && extent.width > 0 && extent.height > 0) {
+            imageSize = Math.max(extent.width, extent.height);
+            centerX_img = extent.centerX;
+            centerY_img = extent.centerY;
+          } else {
+            var projectedPoint = Celestial.mapProjection(centerCoords);
+            if (!projectedPoint || isNaN(projectedPoint[0]) || isNaN(projectedPoint[1])) continue;
+            imageSize = constInfo.scale ? constInfo.scale * 4 : 200;
+            centerX_img = projectedPoint[0];
+            centerY_img = projectedPoint[1];
           }
           
-          // Calculer la taille de l'image basée sur l'échelle de la constellation
-          var imageSize = constInfo.scale ? constInfo.scale * 4 : 200; // Taille en pixels (augmentée)
-          var halfSize = imageSize / 2;
+          // Angle de rotation pour aligner l'image avec le "sens" de la constellation
+          var orient = constellationOrientation && constellationOrientation[constId];
+          var angleRad = 0;
+          if (orient !== undefined && orient !== null) {
+            if (typeof orient === "number") {
+              angleRad = -orient * Math.PI / 180; // degrés → radians (canvas: sens horaire positif)
+            } else if (Array.isArray(orient) && orient.length >= 2) {
+              var projHead = Celestial.mapProjection(orient);
+              if (projHead && !isNaN(projHead[0])) {
+                var dx = projHead[0] - centerX_img, dy = projHead[1] - centerY_img;
+                angleRad = Math.atan2(dy, dx) + Math.PI / 4; // diagonale haut-droite de l'image vers le point "tête"
+              }
+            }
+          }
           
-          console.log("✓ Dessin image pour:", constId, "à", projectedPoint, "taille:", imageSize, "img size:", img.width, "x", img.height);
-          
-          // Dessiner un rectangle de test pour vérifier la position
-          context.save();
-          context.strokeStyle = "#ff0000";
-          context.lineWidth = 2;
-          context.strokeRect(projectedPoint[0] - halfSize, projectedPoint[1] - halfSize, imageSize, imageSize);
-          context.restore();
-          
-          // Dessiner l'image centrée sur la constellation
           try {
-            context.drawImage(
-              img,
-              projectedPoint[0] - halfSize,
-              projectedPoint[1] - halfSize,
-              imageSize,
-              imageSize
-            );
-            console.log("✓ Image dessinée avec succès pour", constId);
+            context.save();
+            context.translate(centerX_img, centerY_img);
+            context.rotate(angleRad);
+            context.drawImage(img, -imageSize / 2, -imageSize / 2, imageSize, imageSize);
+            if (window.debugConstellationImages) {
+              context.strokeStyle = "#ff0000";
+              context.lineWidth = 2;
+              context.strokeRect(-imageSize / 2, -imageSize / 2, imageSize, imageSize);
+              context.beginPath();
+              context.moveTo(0, 0);
+              context.lineTo(imageSize / 2, -imageSize / 2);
+              context.stroke();
+            }
+            context.restore();
           } catch (e) {
-            console.error("✗ Erreur lors du dessin de l'image pour", constId, ":", e);
+            console.error("Erreur dessin image pour", constId, ":", e);
           }
         }
         
         context.restore();
-      } else {
-        console.log("Pas d'images à dessiner. Constellations:", !!Celestial.constellations, "Cache:", Object.keys(constellationImageCache).length);
       }
       
       // Dessiner la bordure blanche épaisse autour du cercle
@@ -247,9 +346,39 @@ setTimeout(function() {
     }
   });
   
+  // Constellations personnalisées (localStorage + config/custom-stars.json)
+  Celestial.add({
+    type: "line",
+    callback: function() {
+      addCustomConstellationsToMap();
+    },
+    redraw: function() {
+      var lineStyle = { stroke: "#a78bfa", fill: "none", width: 2.5, opacity: 0.9 };
+      Celestial.container.selectAll(".custom-const").each(function(d) {
+        if (!d || !d.geometry || !d.geometry.coordinates) return;
+        Celestial.setStyle(lineStyle);
+        Celestial.map(d);
+        Celestial.context.stroke();
+        if (d.properties && d.properties.loc && typeof Celestial.clip === "function" && Celestial.clip(d.properties.loc)) {
+          var pt = Celestial.mapProjection(d.properties.loc);
+          if (pt && !isNaN(pt[0])) {
+            Celestial.setTextStyle({ fill: "#c4b5fd", font: "bold 12px Helvetica, Arial, sans-serif", align: "center", baseline: "middle" });
+            var name = (d.properties.fr || d.properties.n || d.id || "");
+            Celestial.context.fillText(name, pt[0], pt[1]);
+          }
+        }
+      });
+    }
+  });
+
   // Redessiner pour afficher la bordure
   Celestial.redraw();
   
+  // Après chargement éventuel du fichier config, mettre à jour les constellations personnalisées
+  setTimeout(function() {
+    addCustomConstellationsToMap();
+  }, 500);
+
   // Charger les images des constellations après un délai plus long
   // pour s'assurer que les constellations sont chargées
   setTimeout(function() {
@@ -273,6 +402,21 @@ var constellationImages = {
    "UMi": "images/lion.png", // Petite Ourse (si vous affichez aussi les non-zodiaques)
   // Ajoutez d'autres constellations ici avec leurs images respectives
 };
+
+// Sens / orientation de l'image pour aligner avec la constellation (tête du lion, etc.)
+// La tête de l'animal est supposée dans le coin haut-droite de l'image (diagonale haut-droite).
+// Deux options par constellation :
+//   - Nombre (degrés) : angle de rotation en degrés (0 = droite, 90 = bas canvas). L'image est tournée.
+//   - [lon, lat] : coordonnées de la "tête" de la figure. L'image est tournée pour que sa diagonale haut-droite pointe vers ce point.
+var constellationOrientation = {
+  // Exemple Lion : tête vers (lon, lat) — adapter aux coordonnées réelles de la tête du Lion
+  "Leo": [152, 24],      // direction tête du Lion (à ajuster selon vos données)
+  "UMi": [37.95, 89.26], // étoile polaire = haut de la Petite Ourse
+  // "Vir": 45,             // ou angle en degrés
+};
+
+// Debug : afficher boîte image (orange) et direction prioritaire (ligne depuis le centre)
+window.debugConstellationImages = false;
 
 // Charger les images des constellations
 var constellationImageCache = {};
@@ -356,6 +500,18 @@ setTimeout(function() {
     "date": now
   });
 }, 1000);
+
+// Toggle Debug (paramètres en bas)
+(function() {
+  var cb = document.getElementById("debug-constellation-images");
+  if (cb) {
+    cb.checked = window.debugConstellationImages;
+    cb.addEventListener("change", function() {
+      window.debugConstellationImages = cb.checked;
+      if (typeof Celestial !== "undefined" && Celestial.redraw) Celestial.redraw();
+    });
+  }
+})();
 
   </script>
 
