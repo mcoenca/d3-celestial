@@ -88,6 +88,24 @@ async function main() {
       return Number((raw || "").trim());
     };
 
+    const getOverlayGeometry = async () => {
+      const geometry = await page.evaluate(() => {
+        const overlay = document.getElementById("constellation-overlay");
+        if (!overlay) return null;
+        const rect = overlay.getBoundingClientRect();
+        return {
+          left: rect.left,
+          top: rect.top,
+          width: rect.width,
+          height: rect.height,
+          svgWidth: Number(overlay.getAttribute("width")),
+          svgHeight: Number(overlay.getAttribute("height"))
+        };
+      });
+      assert.ok(geometry, "Géométrie overlay indisponible");
+      return geometry;
+    };
+
     // 1) Ajout d'étoiles par clic.
     await clickAt(0.45, 0.55);
     await clickAt(0.58, 0.48);
@@ -100,9 +118,10 @@ async function main() {
     });
     assert.ok(beforeDrag, "Aucune étoile à déplacer");
 
+    const geom = await getOverlayGeometry();
     const start = {
-      x: overlayBox.x + beforeDrag.cx,
-      y: overlayBox.y + beforeDrag.cy
+      x: geom.left + beforeDrag.cx * (geom.width / geom.svgWidth),
+      y: geom.top + beforeDrag.cy * (geom.height / geom.svgHeight)
     };
     await page.mouse.move(start.x, start.y);
     await page.mouse.down();
