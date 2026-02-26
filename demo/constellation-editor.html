@@ -108,12 +108,22 @@
     #constellation-overlay .star-circle:hover {
       fill: #fcd34d;
     }
+    #constellation-overlay .star-circle.selected {
+      stroke: #60a5fa;
+      stroke-width: 3;
+      filter: drop-shadow(0 0 6px rgba(96, 165, 250, 0.8));
+    }
     #constellation-overlay .edit-line {
       fill: none;
       stroke: #a78bfa;
       stroke-width: 2;
       opacity: 0.9;
-      pointer-events: none;
+      pointer-events: stroke;
+      cursor: pointer;
+    }
+    #constellation-overlay .edit-line:hover {
+      stroke: #c4b5fd;
+      stroke-width: 3;
     }
     .links {
       text-align: center;
@@ -126,12 +136,105 @@
     .links a:hover {
       text-decoration: underline;
     }
+    #saved-constellations-section {
+      margin-top: 16px;
+      padding: 12px;
+      background: #151520;
+      border-radius: 8px;
+      border: 1px solid #2a2a3a;
+    }
+    #saved-constellations-section h2 {
+      margin: 0 0 10px 0;
+      font-size: 14px;
+      font-weight: 600;
+      color: #e0e0e0;
+    }
+    #saved-constellations-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 16px;
+      align-items: baseline;
+      font-size: 12px;
+      color: #94a3b8;
+      margin-top: 10px;
+    }
+    #saved-constellations-list .const-item {
+      display: inline-flex;
+      flex-wrap: nowrap;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+      padding: 4px 8px;
+      background: #1a1a24;
+      border-radius: 4px;
+      border: 1px solid #2a2a3a;
+    }
+    #saved-constellations-list .const-item .const-name { color: #e0e0e0; font-weight: 500; }
+    #saved-constellations-list .const-item span { opacity: 0.9; }
+    #saved-constellations-list .const-item .sep { color: #4b5563; margin: 0 2px; }
+    #editor-layout {
+      display: flex;
+      gap: 16px;
+      align-items: flex-start;
+      max-width: 100%;
+    }
+    #editor-left {
+      flex: 0 1 auto;
+      min-width: 0;
+    }
+    #match-panel {
+      flex: 0 0 300px;
+      background: #151520;
+      border: 1px solid #2a2a3a;
+      border-radius: 8px;
+      padding: 12px;
+      max-height: 85vh;
+      overflow-y: auto;
+      position: sticky;
+      top: 16px;
+    }
+    #match-panel h2 {
+      margin: 0 0 12px 0;
+      font-size: 15px;
+      font-weight: 600;
+      color: #e0e0e0;
+    }
+    #match-panel .progress-section {
+      margin-bottom: 12px;
+      font-size: 12px;
+      color: #94a3b8;
+    }
+    #match-panel .progress-bar-wrap {
+      height: 8px;
+      background: #1a1a24;
+      border-radius: 4px;
+      overflow: hidden;
+      margin: 6px 0;
+    }
+    #match-panel .progress-bar {
+      height: 100%;
+      background: #3b82f6;
+      width: 0%;
+      transition: width 0.15s;
+    }
+    #match-panel .result-item {
+      margin-bottom: 10px;
+      padding: 8px;
+      background: #1a1a24;
+      border-radius: 6px;
+      font-size: 12px;
+      border: 1px solid #2a2a3a;
+    }
+    #match-panel .result-item .score { color: #94a3b8; }
+    #match-panel .result-item button { margin-top: 6px; }
   </style>
 </head>
 <body>
+  <div id="editor-layout">
+    <div id="editor-left">
   <h1>Éditeur de constellation</h1>
   <div class="info">
-    Référence : Petite Ourse visible. Clic = ajouter une étoile · Glisser une étoile = la déplacer · Clic droit sur une étoile = la supprimer ainsi que toutes les suivantes. Les étoiles sont reliées dans l'ordre.
+    Référence : Petite Ourse visible. Clic zone vide = ajouter une étoile · Clic sur une étoile = la sélectionner · Clic sur une autre étoile = les relier par un trait · Clic sur un trait = le supprimer (les étoiles restent) · Glisser une étoile = la déplacer · Clic droit sur une étoile = la supprimer.
   </div>
 
   <div id="editor-toolbar">
@@ -145,13 +248,53 @@
     <button type="button" class="secondary" id="btn-export">Exporter custom-stars.json</button>
   </div>
 
+  <div id="image-background-panel" style="margin-bottom:16px; padding:12px; background:#151520; border-radius:8px; border:1px solid #2a2a3a;">
+    <div style="font-weight:600; margin-bottom:8px; color:#e0e0e0;">Image de fond (icône animal)</div>
+    <div style="display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-bottom:10px;">
+      <input type="text" id="icon-search" placeholder="Ex: animal, lion, cat" style="padding:6px 10px; border:1px solid #3a3a4a; border-radius:4px; background:#1a1a24; color:#e0e0e0; width:180px;" />
+      <button type="button" class="secondary" id="btn-icon-search">Rechercher</button>
+      <label style="display:flex; align-items:center; gap:6px; color:#94a3b8; font-size:13px;">
+        Couleur icône :
+        <input type="color" id="icon-color" value="#ffffff" title="Couleur des icônes" style="width:32px; height:28px; padding:0; border:1px solid #3a3a4a; border-radius:4px; cursor:pointer; background:#1a1a24;" />
+      </label>
+      <label style="display:flex; align-items:center; gap:6px; color:#94a3b8; font-size:13px;">
+        Rotation (°) :
+        <input type="number" id="icon-orientation" min="-180" max="180" step="15" value="0" placeholder="0" title="Angle en degrés (0 = droite)" style="width:56px; padding:4px 6px; border:1px solid #3a3a4a; border-radius:4px; background:#1a1a24; color:#e0e0e0;" />
+      </label>
+      <button type="button" class="secondary" id="btn-download-icon" title="Convertir en image locale (hors ligne)">Télécharger l'image</button>
+      <button type="button" class="secondary" id="btn-remove-icon">Retirer l'image</button>
+      <span id="icon-selected-label" style="color:#94a3b8; font-size:13px;"></span>
+    </div>
+    <div id="icon-grid" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(48px, 1fr)); gap:8px; max-height:200px; overflow-y:auto;"></div>
+  </div>
+
   <div id="celestial-map-wrapper">
     <div id="celestial-map"></div>
     <svg id="constellation-overlay" aria-hidden="true"></svg>
   </div>
 
+  <div id="saved-constellations-section">
+    <h2>Constellations enregistrées</h2>
+    <button type="button" class="danger" id="btn-clear-all-constellations">Effacer toutes les constellations</button>
+    <div id="saved-constellations-list"></div>
+  </div>
+
   <div class="links">
     <a href="sample-paris.html">← Retour au ciel de Paris</a>
+  </div>
+    </div>
+    <aside id="match-panel">
+      <h2>Recherche dans le catalogue</h2>
+      <p style="font-size:12px; color:#94a3b8; margin-bottom:10px;">Trouve des étoiles du catalogue dont la forme ressemble à votre constellation.</p>
+      <button type="button" class="secondary" id="btn-match-search" style="width:100%; margin-bottom:12px;">Rechercher une correspondance</button>
+      <div id="match-progress" class="progress-section" style="display:none;">
+        <div>Opérations : <span id="match-ops-done">0</span> / <span id="match-ops-total">0</span></div>
+        <div class="progress-bar-wrap"><div id="match-progress-bar" class="progress-bar"></div></div>
+        <div>Temps écoulé : <span id="match-time-elapsed">0</span> s</div>
+        <div>Temps restant estimé : <span id="match-time-remaining">—</span></div>
+      </div>
+      <div id="match-results" style="margin-top:12px;"></div>
+    </aside>
   </div>
 
   <script type="text/javascript">
@@ -159,25 +302,92 @@
   var STORAGE_KEY = "customConstellations";
   var REFERENCE_CONST = "UMi"; // Petite Ourse
 
-  // État de l'éditeur : nom + liste de points [lon, lat] en degrés
+  // État de l'éditeur : nom + points [lon, lat] + arêtes [indexA, indexB] + image de fond
   var editorState = {
     name: "",
-    stars: []
+    stars: [],
+    links: [],
+    image: null,       // URL ou data URL de l'icône de fond
+    orientation: null, // nombre (degrés) ou [lon, lat] pour la tête
+    iconColor: "#ffffff" // couleur des icônes Iconify (fond noir → blanc par défaut)
   };
+  // Étoile sélectionnée (pour créer un trait vers une autre) ou null
+  var selectedStarIndex = null;
   // Drag manuel : évite le conflit avec le clic (pas de nouveau point au release)
   var dragState = { active: false, starIndex: -1, didMove: false };
+  // Prévisualisation d'un candidat de recherche : coords du candidat (même ordre que stars) ou null
+  var previewCandidateCoords = null;
 
-  // Configuration carte : centrée sur la Petite Ourse, même style que sample-paris
+  function angleBetweenVectorsDeg(v1, v2) {
+    var d = v1[0] * v2[0] + v1[1] * v2[1];
+    var n1 = Math.sqrt(v1[0] * v1[0] + v1[1] * v1[1]);
+    var n2 = Math.sqrt(v2[0] * v2[0] + v2[1] * v2[1]);
+    if (n1 < 1e-10 || n2 < 1e-10) return 0;
+    var cos = Math.max(-1, Math.min(1, d / (n1 * n2)));
+    return Math.acos(cos) * 180 / Math.PI;
+  }
+
+  function computeAngleDiffAtVertices(starsA, starsB, linkList) {
+    var K = starsA.length;
+    var neighbors = [];
+    for (var i = 0; i < K; i++) neighbors[i] = [];
+    linkList.forEach(function(edge) {
+      var a = edge[0], b = edge[1];
+      if (neighbors[a].indexOf(b) === -1) neighbors[a].push(b);
+      if (neighbors[b].indexOf(a) === -1) neighbors[b].push(a);
+    });
+    var diffs = [];
+    for (var i = 0; i < K; i++) {
+      if (neighbors[i].length < 2) { diffs[i] = 0; continue; }
+      var a = neighbors[i][0], b = neighbors[i][1];
+      var v1A = [starsA[a][0] - starsA[i][0], starsA[a][1] - starsA[i][1]];
+      var v2A = [starsA[b][0] - starsA[i][0], starsA[b][1] - starsA[i][1]];
+      var v1B = [starsB[a][0] - starsB[i][0], starsB[a][1] - starsB[i][1]];
+      var v2B = [starsB[b][0] - starsB[i][0], starsB[b][1] - starsB[i][1]];
+      var angleA = angleBetweenVectorsDeg(v1A, v2A);
+      var angleB = angleBetweenVectorsDeg(v1B, v2B);
+      var diff = Math.abs(angleA - angleB);
+      if (diff > 180) diff = 360 - diff;
+      diffs[i] = diff;
+    }
+    return diffs;
+  }
+
+  // Image de fond en cache pour dessin sur le canvas (chargée depuis editorState.image)
+  var editorBackgroundImage = null;
+  function iconifyUrlWithColor(url, color) {
+    if (!url || url.indexOf("api.iconify.design") === -1) return url;
+    var sep = url.indexOf("?") !== -1 ? "&" : "?";
+    return url + sep + "color=" + encodeURIComponent(color || "#ffffff");
+  }
+  function updateEditorBackgroundImage() {
+    if (!editorState.image) {
+      editorBackgroundImage = null;
+      if (typeof Celestial !== "undefined" && Celestial.redraw) Celestial.redraw();
+      return;
+    }
+    var src = iconifyUrlWithColor(editorState.image, editorState.iconColor);
+    var img = new Image();
+    img.onload = function() {
+      editorBackgroundImage = img;
+      if (typeof Celestial !== "undefined" && Celestial.redraw) Celestial.redraw();
+    };
+    img.onerror = function() { editorBackgroundImage = null; };
+    img.crossOrigin = "anonymous";
+    img.src = src;
+  }
+
+  // Configuration : uniquement la Petite Ourse, canvas réduit, pas de zoom
   var config = {
-    width: 0,
+    width: 420,
     projection: "airy",
     transform: "equatorial",
-    background: { fill: "#000000", stroke: "#ffffff", width: 5, opacity: 1 },
+    background: { fill: "#000000", stroke: "#333", width: 1, opacity: 1 },
     adaptable: false,
-    interactive: true,
+    interactive: false,
     disableAnimations: true,
     form: false,
-    controls: true,
+    controls: false,
     follow: "zenith",
     location: false,
     formFields: {"location": false, "general": false, "stars": false, "dsos": false,
@@ -185,41 +395,28 @@
     container: "celestial-map",
     datapath: "../data/",
     lang: "fr",
-    center: [-120, 78, 0],  // Centrer vers Petite Ourse (UMi)
-    zoomlevel: 2.2,        // Zoom pour bien voir la région
-    stars: {
-      show: true,
-      limit: 6,
-      colors: true,
-      style: { fill: "#ffffff", opacity: 1 },
-      names: false,
-      proper: false,
-      desig: false,
-      size: 7,
-      exponent: -0.28,
-      data: "stars.6.json"
-    },
+    center: [-120, 78, 0],
+    zoomlevel: 6.6,
+    stars: { show: false },
     dsos: { show: false },
     constellations: {
       show: true,
       names: true,
       namesType: "fr",
       desig: false,
-      namestyle: { fill: "#cccc99", align: "center", baseline: "middle", opacity: 0.8,
-                   font: ["bold 14px Helvetica, Arial, sans-serif",
-                          "bold 12px Helvetica, Arial, sans-serif",
-                          "bold 11px Helvetica, Arial, sans-serif"]},
+      namestyle: { fill: "#888", align: "center", baseline: "middle", opacity: 0.9,
+                   font: ["bold 12px Helvetica, Arial, sans-serif",
+                          "bold 11px Helvetica, Arial, sans-serif",
+                          "bold 10px Helvetica, Arial, sans-serif"]},
       lines: true,
-      linestyle: { stroke: "#cccccc", width: 2.5, opacity: 0.8 },
+      linestyle: { stroke: "#666", width: 2, opacity: 0.9 },
       bounds: false
     },
-    mw: { show: true, style: { fill: "#ffffff", opacity: "0.15" } },
+    mw: { show: false },
     lines: {
-      graticule: { show: true, stroke: "#cccccc", width: 0.6, opacity: 0.8,
-        lon: { pos: ["center"], fill: "#eee", font: "10px Helvetica, Arial, sans-serif" },
-        lat: { pos: ["center"], fill: "#eee", font: "10px Helvetica, Arial, sans-serif" }},
-      equatorial: { show: true, stroke: "#aaaaaa", width: 1.3, opacity: 0.7 },
-      ecliptic: { show: true, stroke: "#66cc66", width: 1.3, opacity: 0.7 },
+      graticule: { show: false },
+      equatorial: { show: false },
+      ecliptic: { show: false },
       galactic: { show: false },
       supergalactic: { show: false }
     }
@@ -228,36 +425,32 @@
   Celestial.display(config);
 
   setTimeout(function() {
-    var canvas = d3.select("#celestial-map canvas");
-    if (canvas.node()) {
-      var fixedRotation = Celestial.mapProjection.rotate().slice();
-      canvas.on("mousedown.zoom", null);
-      canvas.on("touchstart.zoom", null);
-      var originalZoom = canvas.on("zoom");
-      canvas.on("zoom", function() {
-        Celestial.mapProjection.rotate(fixedRotation);
-        if (originalZoom) originalZoom.apply(this, arguments);
-      });
+    // Retirer du DOM toutes les constellations sauf Petite Ourse (une fois qu'elles sont chargées)
+    var filterConstellationsRedrawDone = false;
+    function filterConstellationsOnce() {
+      var sel = d3.select("#celestial-map");
+      var n = 0;
+      sel.selectAll(".constline").filter(function(d) {
+        return d && d.id && d.id !== REFERENCE_CONST;
+      }).each(function() { n++; }).remove();
+      sel.selectAll(".constname").filter(function(d) {
+        return d && d.id && d.id !== REFERENCE_CONST;
+      }).each(function() { n++; }).remove();
+      sel.selectAll(".boundaryline").filter(function(d) {
+        return d && d.id && d.id !== REFERENCE_CONST;
+      }).remove();
+      if (n > 0 && !filterConstellationsRedrawDone) {
+        filterConstellationsRedrawDone = true;
+        Celestial.redraw();
+      }
     }
 
-    // Afficher uniquement la Petite Ourse (UMi) comme référence
-    setTimeout(function() {
-      d3.selectAll(".constname").each(function(d) {
-        if (d && d.id && d.id !== REFERENCE_CONST) d3.select(this).style("display", "none");
-      });
-      d3.selectAll(".constline").each(function(d) {
-        if (d && d.id && d.id !== REFERENCE_CONST) d3.select(this).style("display", "none");
-      });
-      d3.selectAll(".boundaryline").each(function(d) {
-        if (d && d.id && d.id !== REFERENCE_CONST) d3.select(this).style("display", "none");
-      });
-    }, 2500);
-
-    // Redraw : bordure + overlay des étoiles en édition
+    // Redraw : image de fond (sous l'overlay) — centre/taille/rotation comme en vue Paris
     Celestial.add({
       type: "raw",
       callback: function() {},
       redraw: function() {
+        filterConstellationsOnce();
         var canvas = d3.select("#celestial-map canvas");
         if (!canvas.node()) return;
         var context = canvas.node().getContext("2d");
@@ -266,8 +459,40 @@
         var centerY = metrics.height / 2;
         var radius = Math.min(metrics.width, metrics.height) / 2;
         context.save();
-        context.strokeStyle = "#ffffff";
-        context.lineWidth = 5;
+        if (editorBackgroundImage && editorBackgroundImage.complete && editorBackgroundImage.naturalWidth > 0) {
+          context.globalAlpha = 0.5;
+          var size = Math.min(metrics.width, metrics.height) * 0.5;
+          var imgCenterX = centerX;
+          var imgCenterY = centerY;
+          var angleRad = 0;
+          if (editorState.stars && editorState.stars.length >= 2 && typeof Celestial.mapProjection === "function") {
+            var sumX = 0, sumY = 0;
+            editorState.stars.forEach(function(p) {
+              var pt = Celestial.mapProjection(p);
+              if (pt && !isNaN(pt[0])) { sumX += pt[0]; sumY += pt[1]; }
+            });
+            imgCenterX = sumX / editorState.stars.length;
+            imgCenterY = sumY / editorState.stars.length;
+            if (editorState.orientation != null) {
+              if (typeof editorState.orientation === "number") {
+                angleRad = -editorState.orientation * Math.PI / 180;
+              } else if (Array.isArray(editorState.orientation) && editorState.orientation.length >= 2) {
+                var projHead = Celestial.mapProjection(editorState.orientation);
+                if (projHead && !isNaN(projHead[0])) {
+                  angleRad = Math.atan2(projHead[1] - imgCenterY, projHead[0] - imgCenterX) + Math.PI / 4;
+                }
+              }
+            }
+          }
+          context.translate(imgCenterX, imgCenterY);
+          context.rotate(angleRad);
+          context.drawImage(editorBackgroundImage, -size / 2, -size / 2, size, size);
+          context.rotate(-angleRad);
+          context.translate(-imgCenterX, -imgCenterY);
+          context.globalAlpha = 1;
+        }
+        context.strokeStyle = "#333";
+        context.lineWidth = 1;
         context.beginPath();
         context.arc(centerX, centerY, radius, 0, 2 * Math.PI);
         context.stroke();
@@ -280,18 +505,28 @@
   }, 1000);
 
   function updateOverlay() {
-    var metrics = Celestial.metrics();
-    var w = metrics.width;
-    var h = metrics.height;
-    var mapDiv = document.getElementById("celestial-map");
     var overlay = document.getElementById("constellation-overlay");
-    if (!overlay || !mapDiv) return;
+    var wrapper = document.getElementById("celestial-map-wrapper");
+    var canvas = document.querySelector("#celestial-map canvas");
+    if (!overlay || !canvas) return;
+
+    // Utiliser les mêmes dimensions que le canvas (espace de la projection), pas metrics()
+    // car la projection utilise canvaswidth x canvasheight (ex. 421 si background.width: 1)
+    var dpr = window.devicePixelRatio || 1;
+    var w = canvas.width / dpr;
+    var h = canvas.height / dpr;
+    var canvasRect = canvas.getBoundingClientRect();
 
     overlay.setAttribute("width", w);
     overlay.setAttribute("height", h);
     overlay.setAttribute("viewBox", "0 0 " + w + " " + h);
-    overlay.style.width = mapDiv.offsetWidth + "px";
-    overlay.style.height = mapDiv.offsetHeight + "px";
+    overlay.style.width = canvasRect.width + "px";
+    overlay.style.height = canvasRect.height + "px";
+    if (wrapper) {
+      var wrapRect = wrapper.getBoundingClientRect();
+      overlay.style.left = (canvasRect.left - wrapRect.left) + "px";
+      overlay.style.top = (canvasRect.top - wrapRect.top) + "px";
+    }
 
     var selG = d3.select(overlay).selectAll("g").data([null]);
     selG.enter().append("g");
@@ -301,27 +536,85 @@
     g.selectAll("rect.overlay-hit").data([null]).enter().append("rect").attr("class", "overlay-hit");
     g.select("rect.overlay-hit").attr("width", w).attr("height", h).attr("x", 0).attr("y", 0).style("pointer-events", "all");
 
-    // Lignes entre étoiles consécutives
-    var lineCoords = [];
-    for (var i = 0; i < editorState.stars.length - 1; i++) {
-      var a = Celestial.mapProjection(editorState.stars[i]);
-      var b = Celestial.mapProjection(editorState.stars[i + 1]);
-      if (a && b && !isNaN(a[0]) && !isNaN(b[0])) {
-        lineCoords.push([a, b]);
-      }
-    }
-
-    g.selectAll("line").remove();
-    lineCoords.forEach(function(seg) {
-      g.append("line")
-        .attr("x1", seg[0][0])
-        .attr("y1", seg[0][1])
-        .attr("x2", seg[1][0])
-        .attr("y2", seg[1][1])
-        .attr("class", "edit-line")
-        .style("stroke", "#a78bfa")
-        .style("stroke-width", 2);
+    // Lignes depuis editorState.links (une par arête)
+    var links = editorState.links.filter(function(edge) {
+      var i = edge[0], j = edge[1];
+      return i >= 0 && i < editorState.stars.length && j >= 0 && j < editorState.stars.length && i !== j;
     });
+    var angleDiffs = null;
+    var maxAngleDiff = 0;
+    if (previewCandidateCoords && previewCandidateCoords.length === editorState.stars.length) {
+      angleDiffs = computeAngleDiffAtVertices(editorState.stars, previewCandidateCoords, links);
+      maxAngleDiff = Math.max.apply(null, angleDiffs);
+      if (maxAngleDiff < 1e-6) maxAngleDiff = 1;
+    }
+    var lines = g.selectAll("line.edit-line").data(links, function(d) { return d[0] + "-" + d[1]; });
+    lines.exit().remove();
+    lines.enter()
+      .append("line")
+      .attr("class", "edit-line")
+      .style("stroke", "#a78bfa")
+      .style("stroke-width", 2)
+      .on("click", function(d) {
+        d3.event.stopPropagation();
+        d3.event.preventDefault();
+        var idx = editorState.links.indexOf(d);
+        if (idx !== -1) {
+          editorState.links.splice(idx, 1);
+          Celestial.redraw();
+        }
+      });
+    g.selectAll("line.edit-line")
+      .attr("x1", function(d) {
+        var p = Celestial.mapProjection(editorState.stars[d[0]]);
+        return p ? p[0] : 0;
+      })
+      .attr("y1", function(d) {
+        var p = Celestial.mapProjection(editorState.stars[d[0]]);
+        return p ? p[1] : 0;
+      })
+      .attr("x2", function(d) {
+        var p = Celestial.mapProjection(editorState.stars[d[1]]);
+        return p ? p[0] : 0;
+      })
+      .attr("y2", function(d) {
+        var p = Celestial.mapProjection(editorState.stars[d[1]]);
+        return p ? p[1] : 0;
+      })
+      .style("stroke", function(d) {
+        if (!angleDiffs) return "#a78bfa";
+        var m = Math.max(angleDiffs[d[0]] || 0, angleDiffs[d[1]] || 0);
+        var t = maxAngleDiff > 0 ? m / maxAngleDiff : 0;
+        var r = Math.round(34 + (239 - 34) * t);
+        var g = Math.round(197 + (68 - 197) * t);
+        var b = Math.round(94 + (68 - 94) * t);
+        return "rgb(" + r + "," + g + "," + b + ")";
+      });
+    g.selectAll("text.preview-angle").remove();
+    if (angleDiffs) {
+      var labelData = [];
+      angleDiffs.forEach(function(diff, i) {
+        if (diff > 0.1) labelData.push({ i: i, diff: diff });
+      });
+      g.selectAll("text.preview-angle").data(labelData).enter()
+        .append("text")
+        .attr("class", "preview-angle")
+        .attr("text-anchor", "middle")
+        .attr("dominant-baseline", "middle")
+        .style("fill", "#ef4444")
+        .style("font-size", "10px")
+        .style("font-weight", "bold")
+        .style("pointer-events", "none")
+        .text(function(d) { return d.diff.toFixed(1) + "°"; })
+        .attr("x", function(d) {
+          var p = Celestial.mapProjection(editorState.stars[d.i]);
+          return p ? p[0] : 0;
+        })
+        .attr("y", function(d) {
+          var p = Celestial.mapProjection(editorState.stars[d.i]);
+          return p ? p[1] - 14 : 0;
+        });
+    }
 
     var stars = g.selectAll(".star-circle")
       .data(editorState.stars, function(d, i) { return i; });
@@ -331,7 +624,7 @@
       .append("circle")
       .attr("class", "star-circle")
       .attr("r", starRadius);
-    // Positions + drag manuel (mousedown/mousemove/mouseup) + contextmenu
+    // Positions + surbrillance si sélectionnée + drag manuel + contextmenu
     g.selectAll(".star-circle")
       .attr("cx", function(d) {
         var p = Celestial.mapProjection(d);
@@ -341,6 +634,7 @@
         var p = Celestial.mapProjection(d);
         return p ? p[1] : 0;
       })
+      .classed("selected", function(d, i) { return i === selectedStarIndex; })
       .on("mousedown", function(d, i) {
         var ev = d3.event;
         ev.stopPropagation();
@@ -365,6 +659,9 @@
           dragState.active = false;
           document.removeEventListener("mousemove", moveHandler);
           document.removeEventListener("mouseup", upHandler);
+          if (!dragState.didMove) {
+            handleStarClick(i);
+          }
           Celestial.redraw();
         };
         document.addEventListener("mousemove", moveHandler);
@@ -372,27 +669,68 @@
       })
       .on("contextmenu", function(d, i) {
         d3.event.preventDefault();
-        editorState.stars.splice(i, editorState.stars.length - i);
+        removeStarAtIndex(i);
         Celestial.redraw();
       });
 
     function redrawOverlayLines(grp) {
-      grp.selectAll("line").remove();
-      for (var i = 0; i < editorState.stars.length - 1; i++) {
-        var a = Celestial.mapProjection(editorState.stars[i]);
-        var b = Celestial.mapProjection(editorState.stars[i + 1]);
-        if (a && b && !isNaN(a[0])) {
-          grp.append("line")
-            .attr("x1", a[0]).attr("y1", a[1])
-            .attr("x2", b[0]).attr("y2", b[1])
-            .attr("class", "edit-line")
-            .style("stroke", "#a78bfa")
-            .style("stroke-width", 2);
-        }
-      }
+      var linkList = editorState.links.filter(function(edge) {
+        var i = edge[0], j = edge[1];
+        return i >= 0 && i < editorState.stars.length && j >= 0 && j < editorState.stars.length && i !== j;
+      });
+      grp.selectAll("line.edit-line").data(linkList, function(d) { return d[0] + "-" + d[1]; }).exit().remove();
+      grp.selectAll("line.edit-line").data(linkList, function(d) { return d[0] + "-" + d[1]; })
+        .attr("x1", function(d) {
+          var p = Celestial.mapProjection(editorState.stars[d[0]]);
+          return p ? p[0] : 0;
+        })
+        .attr("y1", function(d) {
+          var p = Celestial.mapProjection(editorState.stars[d[0]]);
+          return p ? p[1] : 0;
+        })
+        .attr("x2", function(d) {
+          var p = Celestial.mapProjection(editorState.stars[d[1]]);
+          return p ? p[0] : 0;
+        })
+        .attr("y2", function(d) {
+          var p = Celestial.mapProjection(editorState.stars[d[1]]);
+          return p ? p[1] : 0;
+        });
+      grp.selectAll("line.edit-line").data(linkList, function(d) { return d[0] + "-" + d[1]; }).enter()
+        .append("line")
+        .attr("class", "edit-line")
+        .style("stroke", "#a78bfa")
+        .style("stroke-width", 2)
+        .attr("x1", function(d) {
+          var p = Celestial.mapProjection(editorState.stars[d[0]]);
+          return p ? p[0] : 0;
+        })
+        .attr("y1", function(d) {
+          var p = Celestial.mapProjection(editorState.stars[d[0]]);
+          return p ? p[1] : 0;
+        })
+        .attr("x2", function(d) {
+          var p = Celestial.mapProjection(editorState.stars[d[1]]);
+          return p ? p[0] : 0;
+        })
+        .attr("y2", function(d) {
+          var p = Celestial.mapProjection(editorState.stars[d[1]]);
+          return p ? p[1] : 0;
+        })
+        .on("click", function(d) {
+          d3.event.stopPropagation();
+          d3.event.preventDefault();
+          var idx = editorState.links.indexOf(d);
+          if (idx !== -1) {
+            editorState.links.splice(idx, 1);
+            Celestial.redraw();
+          }
+        });
     }
 
     document.getElementById("star-count").textContent = editorState.stars.length;
+    var matchBtn = document.getElementById("btn-match-search");
+    if (matchBtn) matchBtn.disabled = editorState.stars.length < 2 || editorState.links.length < 1;
   }
 
   function getOverlayXY(event) {
@@ -408,6 +746,42 @@
     return [x * scaleX, y * scaleY];
   }
 
+  function handleStarClick(starIndex) {
+    if (selectedStarIndex === null) {
+      selectedStarIndex = starIndex;
+      return;
+    }
+    if (selectedStarIndex === starIndex) {
+      selectedStarIndex = null;
+      return;
+    }
+    var a = Math.min(selectedStarIndex, starIndex);
+    var b = Math.max(selectedStarIndex, starIndex);
+    var exists = editorState.links.some(function(edge) {
+      return edge[0] === a && edge[1] === b;
+    });
+    if (!exists) {
+      editorState.links.push([a, b]);
+    }
+    selectedStarIndex = null;
+  }
+
+  function removeStarAtIndex(i) {
+    editorState.stars.splice(i, 1);
+    editorState.links = editorState.links.filter(function(edge) {
+      return edge[0] !== i && edge[1] !== i;
+    }).map(function(edge) {
+      return [
+        edge[0] > i ? edge[0] - 1 : edge[0],
+        edge[1] > i ? edge[1] - 1 : edge[1]
+      ];
+    }).filter(function(edge) {
+      return edge[0] !== edge[1];
+    });
+    if (selectedStarIndex === i) selectedStarIndex = null;
+    else if (selectedStarIndex > i) selectedStarIndex--;
+  }
+
   // Clic sur l'overlay (zone vide) = ajouter une étoile. Ne pas ajouter si on vient de lâcher un drag.
   d3.select("#constellation-overlay").on("click", function() {
     var ev = d3.event;
@@ -416,11 +790,16 @@
       return;
     }
     if (ev.target && ev.target.classList && ev.target.classList.contains("star-circle")) return;
+    if (ev.target && ev.target.classList && ev.target.classList.contains("edit-line")) return;
     var xy = getOverlayXY(ev);
     if (!xy) return;
     var inv = Celestial.mapProjection.invert(xy);
     if (inv && !isNaN(inv[0])) {
+      var prevCount = editorState.stars.length;
       editorState.stars.push(inv);
+      if (prevCount > 0) {
+        editorState.links.push([prevCount - 1, prevCount]);
+      }
       Celestial.redraw();
     }
   });
@@ -431,7 +810,7 @@
 
   document.getElementById("btn-remove-star").addEventListener("click", function() {
     if (editorState.stars.length) {
-      editorState.stars.pop();
+      removeStarAtIndex(editorState.stars.length - 1);
       Celestial.redraw();
     }
   });
@@ -441,24 +820,198 @@
     var stars = editorState.stars;
     if (stars.length < 2) return null;
     var coords = [];
-    for (var i = 0; i < stars.length - 1; i++) {
-      coords.push([stars[i], stars[i + 1]]);
+    if (editorState.links && editorState.links.length > 0) {
+      coords = editorState.links.filter(function(edge) {
+        var i = edge[0], j = edge[1];
+        return i >= 0 && i < stars.length && j >= 0 && j < stars.length && i !== j;
+      }).map(function(edge) {
+        return [stars[edge[0]], stars[edge[1]]];
+      });
+    } else {
+      for (var i = 0; i < stars.length - 1; i++) {
+        coords.push([stars[i], stars[i + 1]]);
+      }
     }
-    var centerLon = stars.reduce(function(s, p) { return s + p[0]; }, 0) / stars.length;
-    var centerLat = stars.reduce(function(s, p) { return s + p[1]; }, 0) / stars.length;
+    if (coords.length === 0) return null;
+    var minLon = Infinity, maxLon = -Infinity, minLat = Infinity, maxLat = -Infinity;
+    stars.forEach(function(p) {
+      if (p[0] < minLon) minLon = p[0];
+      if (p[0] > maxLon) maxLon = p[0];
+      if (p[1] < minLat) minLat = p[1];
+      if (p[1] > maxLat) maxLat = p[1];
+    });
+    var centerLon = (minLon + maxLon) / 2;
+    var centerLat = (minLat + maxLat) / 2;
     var id = "custom-" + (name.replace(/\s+/g, "-").toLowerCase() || "constellation") + "-" + Date.now();
+    var props = { n: name, fr: name, loc: [centerLon, centerLat] };
+    if (editorState.image) {
+      props.image = editorState.image;
+      props.iconColor = editorState.iconColor || "#ffffff";
+      if (typeof Celestial !== "undefined" && typeof Celestial.mapProjection === "function" && typeof Celestial.metrics === "function") {
+        var m = Celestial.metrics();
+        var pad = 15;
+        var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        stars.forEach(function(p) {
+          var pt = Celestial.mapProjection(p);
+          if (pt && !isNaN(pt[0])) {
+            if (pt[0] < minX) minX = pt[0];
+            if (pt[1] < minY) minY = pt[1];
+            if (pt[0] > maxX) maxX = pt[0];
+            if (pt[1] > maxY) maxY = pt[1];
+          }
+        });
+        if (minX !== Infinity) {
+          var extentW = (maxX - minX) + pad * 2;
+          var extentH = (maxY - minY) + pad * 2;
+          var extentMax = Math.max(extentW, extentH);
+          var imageSizeEditor = Math.min(m.width, m.height) * 0.5;
+          props.imageScale = extentMax > 0 ? imageSizeEditor / extentMax : 1;
+        }
+      }
+    }
+    var orient = editorState.orientation;
+    var orientEl = document.getElementById("icon-orientation");
+    if ((orient === undefined || orient === null) && orientEl && orientEl.value.trim() !== "") {
+      orient = parseFloat(orientEl.value.trim());
+    }
+    if (orient !== undefined && orient !== null && orient !== "") {
+      var o = typeof orient === "number" ? orient : parseFloat(orient);
+      if (!isNaN(o)) props.orientation = o;
+    }
     return {
       type: "Feature",
       id: id,
-      properties: { n: name, fr: name, loc: [centerLon, centerLat] },
+      properties: props,
       geometry: { type: "MultiLineString", coordinates: coords }
     };
   }
 
+  // ——— Iconify API : recherche et URL SVG ———
+  function iconifySvgUrl(iconId) {
+    if (!iconId || iconId.indexOf(":") === -1) return null;
+    var parts = iconId.split(":");
+    return "https://api.iconify.design/" + parts[0] + "/" + parts[1] + ".svg";
+  }
+  document.getElementById("icon-color").addEventListener("input", function() {
+    editorState.iconColor = this.value || "#ffffff";
+    updateEditorBackgroundImage();
+    var grid = document.getElementById("icon-grid");
+    if (grid) {
+      grid.querySelectorAll("img").forEach(function(img) {
+        if (img.src && img.src.indexOf("api.iconify.design") !== -1) {
+          var base = img.src.split("?")[0];
+          img.src = iconifyUrlWithColor(base, editorState.iconColor);
+        }
+      });
+    }
+  });
+  document.getElementById("icon-orientation").addEventListener("input", function() {
+    var v = this.value.trim();
+    editorState.orientation = v === "" ? null : parseFloat(v);
+    if (typeof Celestial !== "undefined" && Celestial.redraw) Celestial.redraw();
+  });
+  document.getElementById("icon-orientation").addEventListener("change", function() {
+    var v = this.value.trim();
+    editorState.orientation = v === "" ? null : parseFloat(v);
+    if (typeof Celestial !== "undefined" && Celestial.redraw) Celestial.redraw();
+  });
+  function searchIconify(query, callback) {
+    var q = encodeURIComponent(query || "animal");
+    fetch("https://api.iconify.design/search?query=" + q + "&limit=48")
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        callback(data.icons || []);
+      })
+      .catch(function() { callback([]); });
+  }
+  function updateIconSelectedLabel() {
+    var el = document.getElementById("icon-selected-label");
+    if (!el) return;
+    el.textContent = editorState.image ? "Image de fond définie" : "";
+  }
+
+  document.getElementById("btn-icon-search").addEventListener("click", function() {
+    var query = (document.getElementById("icon-search").value || "animal").trim();
+    var grid = document.getElementById("icon-grid");
+    grid.innerHTML = "<span style='color:#888;'>Chargement…</span>";
+    searchIconify(query, function(icons) {
+      grid.innerHTML = "";
+      if (icons.length === 0) {
+        grid.appendChild(document.createTextNode("Aucun résultat."));
+        return;
+      }
+      icons.forEach(function(iconId) {
+        var url = iconifySvgUrl(iconId);
+        if (!url) return;
+        url = iconifyUrlWithColor(url, editorState.iconColor);
+        var cell = document.createElement("div");
+        cell.style.cssText = "width:40px; height:40px; display:flex; align-items:center; justify-content:center; background:#1a1a24; border-radius:6px; cursor:pointer; border:2px solid transparent;";
+        cell.title = iconId;
+        var img = document.createElement("img");
+        img.src = url;
+        img.alt = iconId;
+        img.style.width = "28px";
+        img.style.height = "28px";
+        img.crossOrigin = "anonymous";
+        cell.appendChild(img);
+        cell.addEventListener("click", function() {
+          editorState.image = iconifySvgUrl(iconId);
+          updateEditorBackgroundImage();
+          updateIconSelectedLabel();
+          grid.querySelectorAll("div").forEach(function(d) { d.style.borderColor = "transparent"; });
+          cell.style.borderColor = "#3b82f6";
+        });
+        grid.appendChild(cell);
+      });
+    });
+  });
+
+  document.getElementById("btn-download-icon").addEventListener("click", function() {
+    if (!editorState.image) {
+      alert("Aucune image sélectionnée.");
+      return;
+    }
+    var url = editorState.image;
+    if (url.indexOf("data:") === 0) {
+      alert("L'image est déjà en local (data URL).");
+      return;
+    }
+    url = iconifyUrlWithColor(url, editorState.iconColor);
+    fetch(url)
+      .then(function(r) { return r.text(); })
+      .then(function(svgText) {
+        var dataUrl = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(svgText)));
+        editorState.image = dataUrl;
+        updateEditorBackgroundImage();
+        updateIconSelectedLabel();
+        alert("Image téléchargée et stockée localement (hors ligne).");
+      })
+      .catch(function() {
+        alert("Impossible de télécharger l'image (CORS ou réseau).");
+      });
+  });
+
+  document.getElementById("btn-remove-icon").addEventListener("click", function() {
+    editorState.image = null;
+    editorState.orientation = null;
+    var orientEl = document.getElementById("icon-orientation");
+    if (orientEl) orientEl.value = "0";
+    updateEditorBackgroundImage();
+    updateIconSelectedLabel();
+    var grid = document.getElementById("icon-grid");
+    if (grid) grid.querySelectorAll("div").forEach(function(d) { d.style.borderColor = "transparent"; });
+    if (typeof Celestial !== "undefined" && Celestial.redraw) Celestial.redraw();
+  });
+
+  updateEditorBackgroundImage();
+  setTimeout(function() {
+    document.getElementById("btn-icon-search").click();
+  }, 500);
+
   document.getElementById("btn-save").addEventListener("click", function() {
     var feature = buildFeature();
     if (!feature) {
-      alert("Ajoutez au moins 2 étoiles et donnez un nom pour sauvegarder.");
+      alert("Ajoutez au moins 2 étoiles, reliez-les par au moins un trait et donnez un nom pour sauvegarder.");
       return;
     }
     var list = [];
@@ -469,6 +1022,7 @@
     list.push(feature);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
     alert("Constellation « " + feature.properties.n + " » sauvegardée dans le navigateur.");
+    refreshSavedConstellationsList();
   });
 
   document.getElementById("btn-export").addEventListener("click", function() {
@@ -484,6 +1038,319 @@
     a.click();
     URL.revokeObjectURL(a.href);
   });
+
+  function getSavedConstellations() {
+    try {
+      var raw = localStorage.getItem(STORAGE_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function escapeHtml(s) {
+    var div = document.createElement("div");
+    div.textContent = s;
+    return div.innerHTML;
+  }
+
+  function refreshSavedConstellationsList() {
+    var list = getSavedConstellations();
+    var container = document.getElementById("saved-constellations-list");
+    if (!container) return;
+    container.innerHTML = "";
+    list.forEach(function(f) {
+      var name = (f.properties && (f.properties.fr || f.properties.n)) || f.id || "—";
+      var loc = (f.properties && f.properties.loc) ? f.properties.loc : null;
+      var locStr = loc ? "loc: " + Number(loc[0]).toFixed(2) + ", " + Number(loc[1]).toFixed(2) : "";
+      var hasImage = !!(f.properties && f.properties.image);
+      var scale = (f.properties && f.properties.imageScale != null) ? Number(f.properties.imageScale).toFixed(2) : "";
+      var rot = (f.properties && f.properties.orientation != null) ? Number(f.properties.orientation) + "°" : "";
+      var color = (f.properties && f.properties.iconColor) ? f.properties.iconColor : "";
+      var segs = (f.geometry && f.geometry.coordinates) ? f.geometry.coordinates.length : 0;
+      var el = document.createElement("span");
+      el.className = "const-item";
+      el.innerHTML =
+        "<span class=\"const-name\">" + escapeHtml(String(name)) + "</span>" +
+        "<span class=\"sep\">|</span>" +
+        "<span>" + (locStr || "—") + "</span>" +
+        (hasImage ? "<span class=\"sep\">|</span><span>image: oui</span>" : "") +
+        (color ? "<span class=\"sep\">|</span><span>couleur: <span style=\"display:inline-block;width:10px;height:10px;border-radius:2px;vertical-align:middle;background:" + escapeHtml(color) + "\"></span></span>" : "") +
+        (scale ? "<span class=\"sep\">|</span><span>scale: " + escapeHtml(scale) + "</span>" : "") +
+        (rot ? "<span class=\"sep\">|</span><span>rot: " + escapeHtml(String(rot)) + "</span>" : "") +
+        "<span class=\"sep\">|</span><span>" + segs + " seg.</span>";
+      container.appendChild(el);
+    });
+    if (list.length === 0) {
+      container.appendChild(document.createTextNode("Aucune constellation enregistrée."));
+    }
+  }
+
+  document.getElementById("btn-clear-all-constellations").addEventListener("click", function() {
+    if (!confirm("Effacer toutes les constellations enregistrées dans le navigateur ? Cette action est irréversible.")) return;
+    localStorage.removeItem(STORAGE_KEY);
+    refreshSavedConstellationsList();
+    alert("Toutes les constellations ont été effacées.");
+  });
+
+  refreshSavedConstellationsList();
+
+  // --- Recherche de correspondance de forme dans le catalogue ---
+  function angularDistanceDeg(ra1, dec1, ra2, dec2) {
+    var d2r = Math.PI / 180;
+    var a1 = ra1 * d2r, b1 = dec1 * d2r, a2 = ra2 * d2r, b2 = dec2 * d2r;
+    var x = Math.sin((a2 - a1) / 2) * Math.sin((a2 - a1) / 2) +
+            Math.cos(a1) * Math.cos(a2) * Math.sin((b2 - b1) / 2) * Math.sin((b2 - b1) / 2);
+    return 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x)) / d2r;
+  }
+
+  function buildNormalizedModel() {
+    var stars = editorState.stars;
+    var links = editorState.links;
+    if (stars.length < 2 || links.length < 1) return null;
+    var i0 = links[0][0], i1 = links[0][1];
+    var cx = 0, cy = 0;
+    stars.forEach(function(p) { cx += p[0]; cy += p[1]; });
+    cx /= stars.length;
+    cy /= stars.length;
+    var L_ref = angularDistanceDeg(stars[i0][0], stars[i0][1], stars[i1][0], stars[i1][1]);
+    if (L_ref < 1e-6) return null;
+    var norm = stars.map(function(p) {
+      return [(p[0] - cx) / L_ref, (p[1] - cy) / L_ref];
+    });
+    return { points: norm, refEdge: [i0, i1], L_ref: L_ref };
+  }
+
+  var GRID_STEP = 3;
+  var MATCH_TOLERANCE_DEG = 0.4;
+  var D_MIN_DEG = 0.5;
+  var D_MAX_DEG = 25;
+  var MAX_CATALOG_STARS = 2000;
+  var BATCH_SIZE = 5000;
+  var TOP_K = 10;
+
+  function buildGridIndex(starList) {
+    var grid = {};
+    starList.forEach(function(s, idx) {
+      var ra = s.coords[0], dec = s.coords[1];
+      var ki = Math.floor(ra / GRID_STEP);
+      var kj = Math.floor(dec / GRID_STEP);
+      var key = ki + "," + kj;
+      if (!grid[key]) grid[key] = [];
+      grid[key].push(idx);
+    });
+    return grid;
+  }
+
+  var PARIS_GEOPOS = [48.8566, 2.3522];
+
+  function visibilityFromParis(coordsList) {
+    if (!coordsList.length || typeof Celestial === "undefined" || typeof Celestial.horizontal !== "function") return "partiel";
+    var dt = new Date();
+    dt.setUTCHours(21, 0, 0, 0);
+    var above = 0;
+    for (var i = 0; i < coordsList.length; i++) {
+      var alt = Celestial.horizontal(dt, coordsList[i], PARIS_GEOPOS)[0];
+      if (alt > 0) above++;
+    }
+    if (above === coordsList.length) return "visible";
+    if (above === 0) return "invisible";
+    return "partiel";
+  }
+
+  function gridNearest(grid, starList, ra, dec, excludeSet, maxDistDeg) {
+    var ki = Math.floor(ra / GRID_STEP);
+    var kj = Math.floor(dec / GRID_STEP);
+    var best = { index: -1, dist: Infinity };
+    for (var di = -1; di <= 1; di++) {
+      for (var dj = -1; dj <= 1; dj++) {
+        var key = (ki + di) + "," + (kj + dj);
+        var cell = grid[key];
+        if (!cell) continue;
+        for (var c = 0; c < cell.length; c++) {
+          var idx = cell[c];
+          if (excludeSet[idx]) continue;
+          var s = starList[idx].coords;
+          var d = angularDistanceDeg(ra, dec, s[0], s[1]);
+          if (d < best.dist) best = { index: idx, dist: d };
+        }
+      }
+    }
+    return best.dist <= maxDistDeg ? best : null;
+  }
+
+  function runShapeSearch() {
+    var stars = editorState.stars;
+    var links = editorState.links;
+    if (stars.length < 2 || links.length < 1) {
+      alert("Dessinez au moins 2 étoiles reliées par au moins un trait.");
+      return;
+    }
+    var model = buildNormalizedModel();
+    if (!model) {
+      alert("Impossible de normaliser la forme (arête de référence trop courte).");
+      return;
+    }
+    var norm = model.points;
+    var K = norm.length;
+    var btn = document.getElementById("btn-match-search");
+    var progressDiv = document.getElementById("match-progress");
+    var opsDoneEl = document.getElementById("match-ops-done");
+    var opsTotalEl = document.getElementById("match-ops-total");
+    var barEl = document.getElementById("match-progress-bar");
+    var timeElapsedEl = document.getElementById("match-time-elapsed");
+    var timeRemainingEl = document.getElementById("match-time-remaining");
+    var resultsDiv = document.getElementById("match-results");
+    btn.disabled = true;
+    progressDiv.style.display = "block";
+    resultsDiv.innerHTML = "";
+    var startTime = Date.now();
+
+    fetch((config.datapath || "../data/") + "stars.6.json")
+      .then(function(r) { return r.json(); })
+      .then(function(json) {
+        var features = (json.features || []).filter(function(f) {
+          return f.properties && f.properties.mag <= 6 && f.geometry && f.geometry.coordinates;
+        });
+        features.sort(function(a, b) { return (a.properties.mag || 99) - (b.properties.mag || 99); });
+        var starList = features.slice(0, MAX_CATALOG_STARS).map(function(f) {
+          return { id: f.id, coords: f.geometry.coordinates.slice(), mag: f.properties.mag };
+        });
+        var N = starList.length;
+        var grid = buildGridIndex(starList);
+        var pairs = [];
+        for (var i = 0; i < N; i++) {
+          for (var j = i + 1; j < N; j++) {
+            var d = angularDistanceDeg(starList[i].coords[0], starList[i].coords[1], starList[j].coords[0], starList[j].coords[1]);
+            if (d >= D_MIN_DEG && d <= D_MAX_DEG) pairs.push([i, j]);
+          }
+        }
+        opsTotalEl.textContent = pairs.length;
+        var done = 0;
+        var candidates = [];
+        var angleModel = Math.atan2(norm[model.refEdge[1]][1] - norm[model.refEdge[0]][1], norm[model.refEdge[1]][0] - norm[model.refEdge[0]][0]);
+
+        function processBatch() {
+          var batchEnd = Math.min(done + BATCH_SIZE, pairs.length);
+          for (var b = done; b < batchEnd; b++) {
+            var p = pairs[b];
+            var i0 = p[0], i1 = p[1];
+            var s0 = starList[i0].coords, s1 = starList[i1].coords;
+            var scaleDeg = angularDistanceDeg(s0[0], s0[1], s1[0], s1[1]);
+            var angleSky = Math.atan2(s1[1] - s0[1], s1[0] - s0[0]);
+            var rot = angleSky - angleModel;
+            var cosR = Math.cos(rot), sinR = Math.sin(rot);
+            var excludeSet = {};
+            excludeSet[i0] = true;
+            excludeSet[i1] = true;
+            var matched = [];
+            for (var m = 0; m < K; m++) matched[m] = -1;
+            matched[model.refEdge[0]] = i0;
+            matched[model.refEdge[1]] = i1;
+            var errors = [];
+            var ok = true;
+            for (var k = 0; k < K; k++) {
+              if (k === model.refEdge[0] || k === model.refEdge[1]) continue;
+              var vx = norm[k][0] - norm[model.refEdge[0]][0];
+              var vy = norm[k][1] - norm[model.refEdge[0]][1];
+              var vrx = vx * cosR - vy * sinR;
+              var vry = vx * sinR + vy * cosR;
+              var exRa = s0[0] + scaleDeg * vrx;
+              var exDec = s0[1] + scaleDeg * vry;
+              var near = gridNearest(grid, starList, exRa, exDec, excludeSet, MATCH_TOLERANCE_DEG);
+              if (!near) { ok = false; break; }
+              excludeSet[near.index] = true;
+              matched[k] = near.index;
+              errors.push(near.dist);
+            }
+            if (ok && matched.indexOf(-1) === -1) {
+              var rms = 0;
+              if (errors.length) {
+                errors.forEach(function(e) { rms += e * e; });
+                rms = Math.sqrt(rms / errors.length);
+              }
+              candidates.push({ starIndices: matched, rms: rms, ratio: scaleDeg / model.L_ref });
+            }
+          }
+          done = batchEnd;
+          var elapsed = (Date.now() - startTime) / 1000;
+          opsDoneEl.textContent = done;
+          barEl.style.width = (pairs.length ? (100 * done / pairs.length) : 0) + "%";
+          timeElapsedEl.textContent = elapsed.toFixed(1);
+          if (done > 0 && done < pairs.length) {
+            var remaining = (elapsed / done) * (pairs.length - done);
+            timeRemainingEl.textContent = remaining.toFixed(1);
+          } else if (done >= pairs.length) {
+            timeRemainingEl.textContent = "0";
+          }
+          if (done < pairs.length) {
+            setTimeout(processBatch, 0);
+          } else {
+            finishSearch();
+          }
+        }
+
+        function finishSearch() {
+          candidates.sort(function(a, b) { return a.rms - b.rms; });
+          var top = candidates.slice(0, TOP_K);
+          btn.disabled = false;
+          if (top.length === 0) {
+            resultsDiv.innerHTML = "<p style='color:#94a3b8; font-size:12px;'>Aucune correspondance trouvée. Essayez d'ajuster la forme ou la tolérance.</p>";
+            return;
+          }
+          var html = "<p class='match-legend' style='font-size:11px; color:#94a3b8; margin-bottom:8px;'>RMS (écartement angulaire par rapport à la forme)</p>";
+          top.forEach(function(cand, idx) {
+            var scoreText = "RMS " + (cand.rms * 60).toFixed(2) + "′";
+            var ratioText = cand.ratio != null ? "Taille : × " + cand.ratio.toFixed(2) : "";
+            var coordsForVisibility = cand.starIndices.map(function(i) { return starList[i].coords; });
+            var vis = visibilityFromParis(coordsForVisibility);
+            var visColor = vis === "visible" ? "#22c55e" : (vis === "invisible" ? "#ef4444" : "#f97316");
+            var visLabel = vis === "visible" ? "Visible Paris (22 h)" : (vis === "invisible" ? "Invisible Paris" : "Partiel Paris");
+            html += "<div class='result-item'>";
+            html += "<span class='score'>#" + (idx + 1) + " — " + scoreText + "</span>";
+            if (ratioText) html += "<br><span style='font-size:11px; color:#94a3b8;'>" + ratioText + "</span>";
+            html += "<br><span style='display:inline-flex; align-items:center; gap:4px; margin-top:4px;' title='" + visLabel + "'><span style='display:inline-block; width:8px; height:8px; border-radius:50%; background:" + visColor + ";'></span><span style='font-size:11px; color:" + visColor + ";'>" + visLabel + "</span></span>";
+            html += "<br><button type='button' class='secondary' data-preview-index='" + idx + "'>Prévisualiser</button> ";
+            html += "<button type='button' class='secondary' data-result-index='" + idx + "'>Appliquer</button>";
+            html += "</div>";
+          });
+          resultsDiv.innerHTML = html;
+          resultsDiv._topCandidates = top.map(function(c) {
+            return c.starIndices.map(function(idx) { return starList[idx].coords.slice(); });
+          });
+          resultsDiv.querySelectorAll("button[data-preview-index]").forEach(function(bt) {
+            bt.addEventListener("click", function() {
+              var idx = parseInt(bt.getAttribute("data-preview-index"), 10);
+              var coords = resultsDiv._topCandidates[idx];
+              if (coords && coords.length === editorState.stars.length) {
+                previewCandidateCoords = coords.map(function(c) { return c.slice(); });
+                if (typeof Celestial !== "undefined" && Celestial.redraw) Celestial.redraw();
+              }
+            });
+          });
+          resultsDiv.querySelectorAll("button[data-result-index]").forEach(function(bt) {
+            bt.addEventListener("click", function() {
+              var idx = parseInt(bt.getAttribute("data-result-index"), 10);
+              var coords = resultsDiv._topCandidates[idx];
+              if (coords && coords.length === editorState.stars.length) {
+                previewCandidateCoords = null;
+                editorState.stars = coords.map(function(c) { return c.slice(); });
+                if (typeof Celestial !== "undefined" && Celestial.redraw) Celestial.redraw();
+              }
+            });
+          });
+        }
+
+        processBatch();
+      })
+      .catch(function(err) {
+        btn.disabled = false;
+        progressDiv.style.display = "none";
+        alert("Impossible de charger le catalogue d'étoiles : " + (err.message || err));
+      });
+  }
+
+  document.getElementById("btn-match-search").addEventListener("click", runShapeSearch);
 
   </script>
 </body>
