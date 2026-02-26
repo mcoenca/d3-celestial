@@ -197,9 +197,11 @@ fetch("../config/custom-stars.json")
   .catch(function() {})
   .then(function() {
     customConstList = getCustomConstellations();
-    // Rafraîchir la carte une fois Celestial prêt (voir setTimeout plus bas)
     if (typeof addCustomConstellationsToMap === "function") {
       setTimeout(addCustomConstellationsToMap, 600);
+    }
+    if (typeof loadConstellationImages === "function") {
+      setTimeout(loadConstellationImages, 800);
     }
   });
 
@@ -254,56 +256,48 @@ setTimeout(function() {
       var centerY = metrics.height / 2;
       var radius = Math.min(metrics.width, metrics.height) / 2;
       
-      // Dessiner les images de fond des constellations
-      if (Celestial.constellations && Object.keys(constellationImageCache).length > 0) {
+      // Dessiner les images de fond des constellations (built-in + custom)
+      if (Object.keys(constellationImageCache).length > 0) {
+        var mergedOrientation = getMergedConstellationOrientation();
         context.save();
-        context.globalAlpha = 0.7; // Opacité des images (augmentée pour mieux voir)
-        
+        context.globalAlpha = 0.7;
+
         for (var constId in constellationImageCache) {
           var img = constellationImageCache[constId];
-          if (!img) {
-            console.log("Image manquante pour:", constId);
-            continue;
+          if (!img || !img.complete || img.naturalWidth === 0) continue;
+
+          var constInfo = Celestial.constellations && Celestial.constellations[constId];
+          var centerCoords = null;
+          var defaultScale = 200;
+          var customFeature = null;
+          if (constInfo && constInfo.center && constInfo.center.length >= 2) {
+            centerCoords = constInfo.center;
+            defaultScale = constInfo.scale ? constInfo.scale * 4 : 200;
+          } else {
+            customConstList.forEach(function(f) {
+              if (f && f.id === constId && f.properties && f.properties.loc) customFeature = f;
+            });
+            if (customFeature) centerCoords = customFeature.properties.loc;
           }
-          if (!img.complete || img.naturalWidth === 0) {
-            console.log("Image pas encore chargée pour:", constId, "complete:", img.complete, "width:", img.naturalWidth);
-            continue; // Image pas encore chargée
-          }
-          
-          var constInfo = Celestial.constellations[constId];
-          if (!constInfo) {
-            console.log("Info constellation manquante pour:", constId, "Constellations disponibles:", Object.keys(Celestial.constellations || {}));
-            continue;
-          }
-          
-          // Obtenir les coordonnées du centre de la constellation
-          // constInfo.center est [longitude, latitude] en degrés
-          var centerCoords = constInfo.center;
-          if (!centerCoords || centerCoords.length < 2) {
-            console.log("Coordonnées invalides pour:", constId);
-            continue;
-          }
-          
-          // Vérifier si la constellation est visible (dans le champ de vue)
-          // Utiliser la fonction clip si disponible, sinon toujours afficher
+          if (!centerCoords || centerCoords.length < 2) continue;
+
           var isVisible = true;
-          if (typeof Celestial.clip === 'function') {
+          if (typeof Celestial.clip === "function") {
             isVisible = Celestial.clip(centerCoords);
           }
-          if (!isVisible) {
-            console.log("Constellation hors champ pour:", constId);
-            continue;
-          }
-          
-          // Calculer la bbox en pixels des lignes de la constellation pour adapter la taille de l'image
+          if (!isVisible) continue;
+
+          var projectedCenter = Celestial.mapProjection(centerCoords);
+          if (!projectedCenter || isNaN(projectedCenter[0]) || isNaN(projectedCenter[1])) continue;
+          var centerX_img = projectedCenter[0];
+          var centerY_img = projectedCenter[1];
+
           var extent = null;
-          d3.select("#celestial-map").selectAll(".constline").each(function(d) {
-            if (!d || d.id !== constId || !d.geometry || !d.geometry.coordinates) return;
-            var coords = d.geometry.coordinates; // MultiLineString: [[[lon,lat],...], ...]
+          function computeExtentFromCoords(coords) {
             var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-            for (var i = 0; i < coords.length; i++) {
-              for (var j = 0; j < coords[i].length; j++) {
-                var pt = Celestial.mapProjection(coords[i][j]);
+            for (var si = 0; si < coords.length; si++) {
+              for (var pj = 0; pj < coords[si].length; pj++) {
+                var pt = Celestial.mapProjection(coords[si][pj]);
                 if (pt && !isNaN(pt[0]) && !isNaN(pt[1])) {
                   if (pt[0] < minX) minX = pt[0];
                   if (pt[1] < minY) minY = pt[1];
@@ -312,47 +306,46 @@ setTimeout(function() {
                 }
               }
             }
-            if (minX !== Infinity) {
-              var w = maxX - minX, h = maxY - minY;
-              var padding = 15; // marge autour de la constellation
-              extent = {
-                minX: minX, minY: minY, maxX: maxX, maxY: maxY,
-                width: w + padding * 2,
-                height: h + padding * 2,
-                centerX: (minX + maxX) / 2,
-                centerY: (minY + maxY) / 2
-              };
-            }
-          });
-          
-          var imageSize, centerX_img, centerY_img;
-          if (extent && extent.width > 0 && extent.height > 0) {
-            imageSize = Math.max(extent.width, extent.height);
-            centerX_img = extent.centerX;
-            centerY_img = extent.centerY;
-          } else {
-            var projectedPoint = Celestial.mapProjection(centerCoords);
-            if (!projectedPoint || isNaN(projectedPoint[0]) || isNaN(projectedPoint[1])) continue;
-            imageSize = constInfo.scale ? constInfo.scale * 4 : 200;
-            centerX_img = projectedPoint[0];
-            centerY_img = projectedPoint[1];
+            if (minX === Infinity) return null;
+            var w = maxX - minX, h = maxY - minY;
+            var padding = 15;
+            return {
+              width: w + padding * 2,
+              height: h + padding * 2
+            };
           }
-          
-          // Angle de rotation pour aligner l'image avec le "sens" de la constellation
-          var orient = constellationOrientation && constellationOrientation[constId];
+          if (constInfo) {
+            d3.select("#celestial-map").selectAll(".constline").each(function(d) {
+              if (!d || d.id !== constId || !d.geometry || !d.geometry.coordinates) return;
+              extent = computeExtentFromCoords(d.geometry.coordinates);
+            });
+          } else if (customFeature && customFeature.geometry && customFeature.geometry.coordinates) {
+            extent = computeExtentFromCoords(customFeature.geometry.coordinates);
+          }
+
+          var imageSize;
+          var savedScale = customFeature && customFeature.properties && customFeature.properties.imageScale;
+          if (extent && extent.width > 0 && extent.height > 0) {
+            var extentMax = Math.max(extent.width, extent.height);
+            imageSize = savedScale != null && typeof savedScale === "number" ? extentMax * savedScale : extentMax;
+          } else {
+            imageSize = defaultScale;
+          }
+
+          var orient = mergedOrientation && mergedOrientation[constId];
           var angleRad = 0;
           if (orient !== undefined && orient !== null) {
             if (typeof orient === "number") {
-              angleRad = -orient * Math.PI / 180; // degrés → radians (canvas: sens horaire positif)
+              angleRad = -orient * Math.PI / 180;
             } else if (Array.isArray(orient) && orient.length >= 2) {
               var projHead = Celestial.mapProjection(orient);
               if (projHead && !isNaN(projHead[0])) {
                 var dx = projHead[0] - centerX_img, dy = projHead[1] - centerY_img;
-                angleRad = Math.atan2(dy, dx) + Math.PI / 4; // diagonale haut-droite de l'image vers le point "tête"
+                angleRad = Math.atan2(dy, dx) + Math.PI / 4;
               }
             }
           }
-          
+
           try {
             context.save();
             context.translate(centerX_img, centerY_img);
@@ -372,7 +365,7 @@ setTimeout(function() {
             console.error("Erreur dessin image pour", constId, ":", e);
           }
         }
-        
+
         context.restore();
       }
       
@@ -459,46 +452,76 @@ var constellationOrientation = {
 // Debug : afficher boîte image (orange) et direction prioritaire (ligne depuis le centre)
 window.debugConstellationImages = false;
 
-// Charger les images des constellations
+// Charger les images des constellations (built-in + custom)
 var constellationImageCache = {};
-function loadConstellationImages() {
-  var loaded = 0;
-  var total = Object.keys(constellationImages).length;
-  
-  console.log("Chargement de", total, "images de constellations");
-  
-  if (total === 0) {
-    console.log("Aucune image à charger");
-    return; // Pas d'images à charger
+function iconifyUrlWithColor(url, color) {
+  if (!url || url.indexOf("api.iconify.design") === -1) return url;
+  var sep = url.indexOf("?") !== -1 ? "&" : "?";
+  return url + sep + "color=" + encodeURIComponent(color || "#ffffff");
+}
+function getMergedConstellationImages() {
+  var merged = {};
+  var k;
+  for (k in constellationImages) { merged[k] = constellationImages[k]; }
+  var list = getCustomConstellations();
+  for (var i = 0; i < list.length; i++) {
+    var f = list[i];
+    if (f && f.properties && f.properties.image) {
+      var url = f.properties.image;
+      var color = (f.properties && f.properties.iconColor) ? f.properties.iconColor : "#ffffff";
+      merged[f.id] = iconifyUrlWithColor(url, color);
+    }
   }
-  
-  for (var constId in constellationImages) {
+  return merged;
+}
+function getMergedConstellationOrientation() {
+  var merged = {};
+  var k;
+  for (k in constellationOrientation) { merged[k] = constellationOrientation[k]; }
+  var list = getCustomConstellations();
+  for (var i = 0; i < list.length; i++) {
+    var f = list[i];
+    if (f && f.properties && f.properties.orientation != null) {
+      merged[f.id] = f.properties.orientation;
+    }
+  }
+  return merged;
+}
+function loadConstellationImages() {
+  var allImages = getMergedConstellationImages();
+  var total = Object.keys(allImages).length;
+  var loaded = 0;
+
+  console.log("Chargement de", total, "images de constellations (built-in + custom)");
+
+  if (total === 0) {
+    return;
+  }
+
+  function onDone() {
+    loaded++;
+    if (loaded === total) {
+      console.log("Toutes les images sont chargées, redessin...");
+      if (typeof Celestial !== "undefined" && Celestial.redraw) Celestial.redraw();
+    }
+  }
+
+  for (var constId in allImages) {
+    var imagePath = allImages[constId];
     var img = new Image();
-    var imagePath = constellationImages[constId];
-    
+    img.crossOrigin = "anonymous";
     img.onload = function(id, path) {
       return function() {
-        console.log("Image chargée avec succès pour", id, ":", path);
-        loaded++;
-        if (loaded === total) {
-          console.log("Toutes les images sont chargées, redessin...");
-          // Toutes les images sont chargées, redessiner
-          Celestial.redraw();
-        }
+        console.log("Image chargée pour", id);
+        onDone();
       };
     }(constId, imagePath);
-    
     img.onerror = function(id, path) {
       return function() {
-        console.error("ERREUR: Impossible de charger l'image pour la constellation:", id, "chemin:", path);
-        loaded++;
-        if (loaded === total) {
-          Celestial.redraw();
-        }
+        console.error("Impossible de charger l'image pour:", id);
+        onDone();
       };
     }(constId, imagePath);
-    
-    console.log("Chargement de l'image pour", constId, ":", imagePath);
     img.src = imagePath;
     constellationImageCache[constId] = img;
   }
