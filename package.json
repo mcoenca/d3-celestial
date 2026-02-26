@@ -12,13 +12,15 @@
   "devDependencies": {
     "jsdom": "^16.5.0",
     "jshint": "^2.11.1",
+    "playwright": "^1.58.2",
     "shelljs": "^0.8.4",
     "uglify-js": "^2.8.29"
   },
   "scripts": {
     "build": "node make.js",
     "test": "node test/celestial-test.js",
-    "jshint": "jshint src/**.js"
+    "jshint": "jshint src/**.js",
+    "test:star-editor-ux": "node test/star-editor-ux.e2e.js"
   },
   "repository": {
     "type": "git",
