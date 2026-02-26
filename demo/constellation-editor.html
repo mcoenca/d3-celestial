@@ -167,17 +167,17 @@
   // Drag manuel : évite le conflit avec le clic (pas de nouveau point au release)
   var dragState = { active: false, starIndex: -1, didMove: false };
 
-  // Configuration carte : centrée sur la Petite Ourse, même style que sample-paris
+  // Configuration : uniquement la Petite Ourse, canvas réduit, pas de zoom
   var config = {
-    width: 0,
+    width: 420,
     projection: "airy",
     transform: "equatorial",
-    background: { fill: "#000000", stroke: "#ffffff", width: 5, opacity: 1 },
+    background: { fill: "#000000", stroke: "#333", width: 1, opacity: 1 },
     adaptable: false,
-    interactive: true,
+    interactive: false,
     disableAnimations: true,
     form: false,
-    controls: true,
+    controls: false,
     follow: "zenith",
     location: false,
     formFields: {"location": false, "general": false, "stars": false, "dsos": false,
@@ -185,41 +185,28 @@
     container: "celestial-map",
     datapath: "../data/",
     lang: "fr",
-    center: [-120, 78, 0],  // Centrer vers Petite Ourse (UMi)
-    zoomlevel: 2.2,        // Zoom pour bien voir la région
-    stars: {
-      show: true,
-      limit: 6,
-      colors: true,
-      style: { fill: "#ffffff", opacity: 1 },
-      names: false,
-      proper: false,
-      desig: false,
-      size: 7,
-      exponent: -0.28,
-      data: "stars.6.json"
-    },
+    center: [-120, 78, 0],
+    zoomlevel: 2.2,
+    stars: { show: false },
     dsos: { show: false },
     constellations: {
       show: true,
       names: true,
       namesType: "fr",
       desig: false,
-      namestyle: { fill: "#cccc99", align: "center", baseline: "middle", opacity: 0.8,
-                   font: ["bold 14px Helvetica, Arial, sans-serif",
-                          "bold 12px Helvetica, Arial, sans-serif",
-                          "bold 11px Helvetica, Arial, sans-serif"]},
+      namestyle: { fill: "#888", align: "center", baseline: "middle", opacity: 0.9,
+                   font: ["bold 12px Helvetica, Arial, sans-serif",
+                          "bold 11px Helvetica, Arial, sans-serif",
+                          "bold 10px Helvetica, Arial, sans-serif"]},
       lines: true,
-      linestyle: { stroke: "#cccccc", width: 2.5, opacity: 0.8 },
+      linestyle: { stroke: "#666", width: 2, opacity: 0.9 },
       bounds: false
     },
-    mw: { show: true, style: { fill: "#ffffff", opacity: "0.15" } },
+    mw: { show: false },
     lines: {
-      graticule: { show: true, stroke: "#cccccc", width: 0.6, opacity: 0.8,
-        lon: { pos: ["center"], fill: "#eee", font: "10px Helvetica, Arial, sans-serif" },
-        lat: { pos: ["center"], fill: "#eee", font: "10px Helvetica, Arial, sans-serif" }},
-      equatorial: { show: true, stroke: "#aaaaaa", width: 1.3, opacity: 0.7 },
-      ecliptic: { show: true, stroke: "#66cc66", width: 1.3, opacity: 0.7 },
+      graticule: { show: false },
+      equatorial: { show: false },
+      ecliptic: { show: false },
       galactic: { show: false },
       supergalactic: { show: false }
     }
@@ -228,36 +215,32 @@
   Celestial.display(config);
 
   setTimeout(function() {
-    var canvas = d3.select("#celestial-map canvas");
-    if (canvas.node()) {
-      var fixedRotation = Celestial.mapProjection.rotate().slice();
-      canvas.on("mousedown.zoom", null);
-      canvas.on("touchstart.zoom", null);
-      var originalZoom = canvas.on("zoom");
-      canvas.on("zoom", function() {
-        Celestial.mapProjection.rotate(fixedRotation);
-        if (originalZoom) originalZoom.apply(this, arguments);
-      });
+    // Retirer du DOM toutes les constellations sauf Petite Ourse (une fois qu'elles sont chargées)
+    var filterConstellationsRedrawDone = false;
+    function filterConstellationsOnce() {
+      var sel = d3.select("#celestial-map");
+      var n = 0;
+      sel.selectAll(".constline").filter(function(d) {
+        return d && d.id && d.id !== REFERENCE_CONST;
+      }).each(function() { n++; }).remove();
+      sel.selectAll(".constname").filter(function(d) {
+        return d && d.id && d.id !== REFERENCE_CONST;
+      }).each(function() { n++; }).remove();
+      sel.selectAll(".boundaryline").filter(function(d) {
+        return d && d.id && d.id !== REFERENCE_CONST;
+      }).remove();
+      if (n > 0 && !filterConstellationsRedrawDone) {
+        filterConstellationsRedrawDone = true;
+        Celestial.redraw();
+      }
     }
 
-    // Afficher uniquement la Petite Ourse (UMi) comme référence
-    setTimeout(function() {
-      d3.selectAll(".constname").each(function(d) {
-        if (d && d.id && d.id !== REFERENCE_CONST) d3.select(this).style("display", "none");
-      });
-      d3.selectAll(".constline").each(function(d) {
-        if (d && d.id && d.id !== REFERENCE_CONST) d3.select(this).style("display", "none");
-      });
-      d3.selectAll(".boundaryline").each(function(d) {
-        if (d && d.id && d.id !== REFERENCE_CONST) d3.select(this).style("display", "none");
-      });
-    }, 2500);
-
-    // Redraw : bordure + overlay des étoiles en édition
+    // Redraw : bordure + overlay
     Celestial.add({
       type: "raw",
       callback: function() {},
       redraw: function() {
+        filterConstellationsOnce();
         var canvas = d3.select("#celestial-map canvas");
         if (!canvas.node()) return;
         var context = canvas.node().getContext("2d");
@@ -266,8 +249,8 @@
         var centerY = metrics.height / 2;
         var radius = Math.min(metrics.width, metrics.height) / 2;
         context.save();
-        context.strokeStyle = "#ffffff";
-        context.lineWidth = 5;
+        context.strokeStyle = "#333";
+        context.lineWidth = 1;
         context.beginPath();
         context.arc(centerX, centerY, radius, 0, 2 * Math.PI);
         context.stroke();
@@ -280,18 +263,28 @@
   }, 1000);
 
   function updateOverlay() {
-    var metrics = Celestial.metrics();
-    var w = metrics.width;
-    var h = metrics.height;
-    var mapDiv = document.getElementById("celestial-map");
     var overlay = document.getElementById("constellation-overlay");
-    if (!overlay || !mapDiv) return;
+    var wrapper = document.getElementById("celestial-map-wrapper");
+    var canvas = document.querySelector("#celestial-map canvas");
+    if (!overlay || !canvas) return;
+
+    // Utiliser les mêmes dimensions que le canvas (espace de la projection), pas metrics()
+    // car la projection utilise canvaswidth x canvasheight (ex. 421 si background.width: 1)
+    var dpr = window.devicePixelRatio || 1;
+    var w = canvas.width / dpr;
+    var h = canvas.height / dpr;
+    var canvasRect = canvas.getBoundingClientRect();
 
     overlay.setAttribute("width", w);
     overlay.setAttribute("height", h);
     overlay.setAttribute("viewBox", "0 0 " + w + " " + h);
-    overlay.style.width = mapDiv.offsetWidth + "px";
-    overlay.style.height = mapDiv.offsetHeight + "px";
+    overlay.style.width = canvasRect.width + "px";
+    overlay.style.height = canvasRect.height + "px";
+    if (wrapper) {
+      var wrapRect = wrapper.getBoundingClientRect();
+      overlay.style.left = (canvasRect.left - wrapRect.left) + "px";
+      overlay.style.top = (canvasRect.top - wrapRect.top) + "px";
+    }
 
     var selG = d3.select(overlay).selectAll("g").data([null]);
     selG.enter().append("g");

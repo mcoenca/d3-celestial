@@ -38,12 +38,39 @@
   </div>
   <div style="overflow:hidden;"><div id="celestial-map"></div></div>
 
-  <div id="celestial-params" style="margin-top:16px; padding:12px; background:#1a1a1a; border-radius:8px; max-width:600px; margin-left:auto; margin-right:auto;">
-    <label style="display:inline-flex; align-items:center; gap:8px; cursor:pointer;">
-      <input type="checkbox" id="debug-constellation-images" />
-      <span>Debug</span>
-    </label>
-    <span style="color:#888; font-size:12px; margin-left:8px;">— boîte image (orange) et direction prioritaire</span>
+  <div id="celestial-params" style="margin-top:16px; padding:12px; background:#1a1a1a; border-radius:8px; max-width:720px; margin-left:auto; margin-right:auto;">
+    <div style="display:flex; flex-wrap:wrap; align-items:center; gap:16px; margin-bottom:12px;">
+      <label style="display:inline-flex; align-items:center; gap:8px; cursor:pointer;">
+        <input type="checkbox" id="debug-constellation-images" />
+        <span>Debug</span>
+      </label>
+      <span style="color:#888; font-size:12px;">— boîte et direction prioritaire</span>
+    </div>
+    <div id="aspect-panel" style="border-top:1px solid #333; padding-top:12px;">
+      <div style="font-weight:bold; margin-bottom:8px; color:#ccc;">Aspect de l'affichage</div>
+      <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap:16px;">
+        <fieldset style="border:1px solid #444; border-radius:6px; padding:10px;">
+          <legend style="color:#aaa;">Lignes de constellations</legend>
+          <label style="display:flex; align-items:center; gap:8px; margin-bottom:6px;"><input type="checkbox" id="aspect-const-lines-show" checked /> Afficher</label>
+          <label style="display:flex; align-items:center; gap:8px; font-size:13px;">Épaisseur <input type="range" id="aspect-const-width" min="0.5" max="6" step="0.25" style="flex:1;" /><span id="aspect-const-width-val">2.5</span></label>
+          <label style="display:flex; align-items:center; gap:8px; font-size:13px;">Opacité <input type="range" id="aspect-const-opacity" min="0.1" max="1" step="0.05" style="flex:1;" /><span id="aspect-const-opacity-val">0.8</span></label>
+        </fieldset>
+        <fieldset style="border:1px solid #444; border-radius:6px; padding:10px;">
+          <legend style="color:#aaa;">Étoiles (points)</legend>
+          <label style="display:flex; align-items:center; gap:8px; margin-bottom:6px;"><input type="checkbox" id="aspect-stars-show" checked /> Afficher</label>
+          <label style="display:flex; align-items:center; gap:8px; font-size:13px;">Taille de base <input type="range" id="aspect-stars-size" min="1" max="20" step="0.5" style="flex:1;" /><span id="aspect-stars-size-val">7</span></label>
+          <label style="display:flex; align-items:center; gap:8px; font-size:13px;">Facteur luminosité (exponent) <input type="range" id="aspect-stars-exponent" min="-0.6" max="0" step="0.02" style="flex:1;" /><span id="aspect-stars-exponent-val">-0.28</span></label>
+        </fieldset>
+        <fieldset style="border:1px solid #444; border-radius:6px; padding:10px;">
+          <legend style="color:#aaa;">Lignes d'univers (grille, équateur, écliptique)</legend>
+          <label style="display:flex; align-items:center; gap:8px; margin-bottom:4px;"><input type="checkbox" id="aspect-line-graticule" checked /> Graticule</label>
+          <label style="display:flex; align-items:center; gap:8px; margin-bottom:4px;"><input type="checkbox" id="aspect-line-equatorial" checked /> Équatorial</label>
+          <label style="display:flex; align-items:center; gap:8px; margin-bottom:6px;"><input type="checkbox" id="aspect-line-ecliptic" checked /> Écliptique</label>
+          <label style="display:flex; align-items:center; gap:8px; font-size:13px;">Épaisseur <input type="range" id="aspect-universe-width" min="0.2" max="3" step="0.1" style="flex:1;" /><span id="aspect-universe-width-val">0.8</span></label>
+          <label style="display:flex; align-items:center; gap:8px; font-size:13px;">Opacité <input type="range" id="aspect-universe-opacity" min="0.2" max="1" step="0.05" style="flex:1;" /><span id="aspect-universe-opacity-val">0.75</span></label>
+        </fieldset>
+      </div>
+    </div>
   </div>
 
   <script type="text/javascript">
@@ -176,28 +203,42 @@ fetch("../config/custom-stars.json")
     }
   });
 
+// Appliquer la config d'affichage et redessiner (préserve rotation et zoom si on rappelle display)
+function applyDisplayConfig() {
+  var rot, sc;
+  if (Celestial.mapProjection) {
+    rot = Celestial.mapProjection.rotate().slice();
+    sc = Celestial.mapProjection.scale();
+  }
+  Celestial.display(config);
+  if (Celestial.mapProjection && rot != null) {
+    Celestial.mapProjection.rotate(rot);
+    Celestial.mapProjection.scale(sc);
+  }
+  Celestial.redraw();
+  fixZoomNoRotation();
+}
+
+// Désactiver la rotation (drag) tout en gardant le zoom (mousewheel)
+function fixZoomNoRotation() {
+  var canvas = d3.select("#celestial-map canvas");
+  if (!canvas.node()) return;
+  var fixedRotation = Celestial.mapProjection.rotate().slice();
+  canvas.on("mousedown.zoom", null);
+  canvas.on("touchstart.zoom", null);
+  var originalZoom = canvas.on("zoom");
+  canvas.on("zoom", function() {
+    Celestial.mapProjection.rotate(fixedRotation);
+    if (originalZoom) originalZoom.apply(this, arguments);
+  });
+}
+
 // Initialiser la carte
 Celestial.display(config);
 
 // Désactiver la rotation (drag) tout en gardant le zoom (mousewheel)
 setTimeout(function() {
-  var canvas = d3.select("#celestial-map canvas");
-  if (canvas.node()) {
-    // Sauvegarder la rotation initiale
-    var fixedRotation = Celestial.mapProjection.rotate().slice();
-    
-    // Désactiver le drag (qui cause la rotation) mais garder le mousewheel
-    canvas.on("mousedown.zoom", null);
-    canvas.on("touchstart.zoom", null);
-    
-    // Intercepter les événements de zoom pour forcer la rotation à rester fixe
-    var originalZoom = canvas.on("zoom");
-    canvas.on("zoom", function() {
-      // Restaurer la rotation fixe après chaque zoom
-      Celestial.mapProjection.rotate(fixedRotation);
-      if (originalZoom) originalZoom.apply(this, arguments);
-    });
-  }
+  fixZoomNoRotation();
   
   // Ajouter un callback pour redessiner la bordure et les images de constellations
   Celestial.add({
@@ -511,6 +552,64 @@ setTimeout(function() {
       if (typeof Celestial !== "undefined" && Celestial.redraw) Celestial.redraw();
     });
   }
+})();
+
+// Panneau Aspect : synchroniser config ↔ contrôles et redessiner
+(function() {
+  function fromConfig() {
+    var c = config.constellations, s = config.stars, l = config.lines;
+    var gw = document.getElementById("aspect-const-width"), go = document.getElementById("aspect-const-opacity");
+    var cs = document.getElementById("aspect-const-lines-show");
+    if (gw) { gw.value = c.linestyle.width; document.getElementById("aspect-const-width-val").textContent = c.linestyle.width; }
+    if (go) { go.value = c.linestyle.opacity; document.getElementById("aspect-const-opacity-val").textContent = c.linestyle.opacity; }
+    if (cs) cs.checked = c.lines;
+    var ss = document.getElementById("aspect-stars-show"), sz = document.getElementById("aspect-stars-size"), ex = document.getElementById("aspect-stars-exponent");
+    if (ss) ss.checked = s.show;
+    if (sz) { sz.value = s.size; document.getElementById("aspect-stars-size-val").textContent = s.size; }
+    if (ex) { ex.value = s.exponent; document.getElementById("aspect-stars-exponent-val").textContent = s.exponent; }
+    var lg = document.getElementById("aspect-line-graticule"), leq = document.getElementById("aspect-line-equatorial"), lec = document.getElementById("aspect-line-ecliptic");
+    if (lg) lg.checked = l.graticule.show;
+    if (leq) leq.checked = l.equatorial.show;
+    if (lec) lec.checked = l.ecliptic.show;
+    var uw = document.getElementById("aspect-universe-width"), uo = document.getElementById("aspect-universe-opacity");
+    var w = (l.graticule.width + l.equatorial.width + l.ecliptic.width) / 3;
+    var o = (l.graticule.opacity + l.equatorial.opacity + l.ecliptic.opacity) / 3;
+    if (uw) { uw.value = w; document.getElementById("aspect-universe-width-val").textContent = Number(w).toFixed(1); }
+    if (uo) { uo.value = o; document.getElementById("aspect-universe-opacity-val").textContent = Number(o).toFixed(2); }
+  }
+  function toConfigAndRedraw() {
+    var c = config.constellations, s = config.stars, l = config.lines;
+    var gw = document.getElementById("aspect-const-width"), go = document.getElementById("aspect-const-opacity");
+    var cs = document.getElementById("aspect-const-lines-show");
+    if (cs) c.lines = cs.checked;
+    if (gw) { c.linestyle.width = parseFloat(gw.value); document.getElementById("aspect-const-width-val").textContent = gw.value; }
+    if (go) { c.linestyle.opacity = parseFloat(go.value); document.getElementById("aspect-const-opacity-val").textContent = go.value; }
+    var ss = document.getElementById("aspect-stars-show"), sz = document.getElementById("aspect-stars-size"), ex = document.getElementById("aspect-stars-exponent");
+    if (ss) s.show = ss.checked;
+    if (sz) { s.size = parseFloat(sz.value); document.getElementById("aspect-stars-size-val").textContent = sz.value; }
+    if (ex) { s.exponent = parseFloat(ex.value); document.getElementById("aspect-stars-exponent-val").textContent = ex.value; }
+    var lg = document.getElementById("aspect-line-graticule"), leq = document.getElementById("aspect-line-equatorial"), lec = document.getElementById("aspect-line-ecliptic");
+    if (lg) l.graticule.show = lg.checked;
+    if (leq) l.equatorial.show = leq.checked;
+    if (lec) l.ecliptic.show = lec.checked;
+    var uw = document.getElementById("aspect-universe-width"), uo = document.getElementById("aspect-universe-opacity");
+    var w = uw ? parseFloat(uw.value) : 0.8, o = uo ? parseFloat(uo.value) : 0.75;
+    if (uw) document.getElementById("aspect-universe-width-val").textContent = uw.value;
+    if (uo) document.getElementById("aspect-universe-opacity-val").textContent = uo.value;
+    l.graticule.width = l.equatorial.width = l.ecliptic.width = w;
+    l.graticule.opacity = l.equatorial.opacity = l.ecliptic.opacity = o;
+    if (typeof Celestial !== "undefined" && Celestial.display) applyDisplayConfig();
+  }
+  fromConfig();
+  ["aspect-const-lines-show", "aspect-const-width", "aspect-const-opacity",
+   "aspect-stars-show", "aspect-stars-size", "aspect-stars-exponent",
+   "aspect-line-graticule", "aspect-line-equatorial", "aspect-line-ecliptic",
+   "aspect-universe-width", "aspect-universe-opacity"].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener("input", toConfigAndRedraw);
+    el.addEventListener("change", toConfigAndRedraw);
+  });
 })();
 
   </script>
