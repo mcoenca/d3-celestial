@@ -125,6 +125,24 @@
       stroke: #c4b5fd;
       stroke-width: 3;
     }
+    #constellation-overlay .preview-line {
+      fill: none;
+      stroke: #38bdf8;
+      stroke-width: 2;
+      stroke-dasharray: 6, 4;
+      opacity: 0.8;
+      pointer-events: none;
+    }
+    #constellation-overlay .preview-circle {
+      fill: #38bdf8;
+      stroke: #0ea5e9;
+      stroke-width: 1.5;
+      opacity: 0.8;
+      pointer-events: none;
+    }
+    #constellation-overlay .preview-legend {
+      pointer-events: none;
+    }
     .links {
       text-align: center;
       margin-top: 16px;
@@ -614,6 +632,70 @@
           var p = Celestial.mapProjection(editorState.stars[d.i]);
           return p ? p[1] - 14 : 0;
         });
+    }
+
+    // --- Overlay en pointillé : constellation trouvée par l'algorithme, alignée sur la constellation créée ---
+    g.selectAll("line.preview-line").remove();
+    g.selectAll("circle.preview-circle").remove();
+    g.selectAll("text.preview-legend").remove();
+    if (previewCandidateCoords && previewCandidateCoords.length === editorState.stars.length && editorState.stars.length >= 2) {
+      var userScreenPts = editorState.stars.map(function(s) {
+        var p = Celestial.mapProjection(s);
+        return p ? [p[0], p[1]] : [0, 0];
+      });
+      var prevScreenPts = previewCandidateCoords.map(function(s) {
+        var p = Celestial.mapProjection(s);
+        return p ? [p[0], p[1]] : [0, 0];
+      });
+      var nPts = userScreenPts.length;
+      var uCx = 0, uCy = 0, pCx = 0, pCy = 0;
+      for (var pi = 0; pi < nPts; pi++) {
+        uCx += userScreenPts[pi][0]; uCy += userScreenPts[pi][1];
+        pCx += prevScreenPts[pi][0]; pCy += prevScreenPts[pi][1];
+      }
+      uCx /= nPts; uCy /= nPts;
+      pCx /= nPts; pCy /= nPts;
+      var uCen = userScreenPts.map(function(p) { return [p[0] - uCx, p[1] - uCy]; });
+      var pCen = prevScreenPts.map(function(p) { return [p[0] - pCx, p[1] - pCy]; });
+      var procNum = 0, procDen = 0;
+      for (var pi = 0; pi < nPts; pi++) {
+        procNum += uCen[pi][0] * pCen[pi][1] - uCen[pi][1] * pCen[pi][0];
+        procDen += uCen[pi][0] * pCen[pi][0] + uCen[pi][1] * pCen[pi][1];
+      }
+      var procTheta = Math.atan2(procNum, procDen);
+      var procCos = Math.cos(procTheta), procSin = Math.sin(procTheta);
+      var pRot = pCen.map(function(p) { return [p[0] * procCos - p[1] * procSin, p[0] * procSin + p[1] * procCos]; });
+      var sumUSq = 0, sumPSq = 0;
+      for (var pi = 0; pi < nPts; pi++) {
+        sumUSq += uCen[pi][0] * uCen[pi][0] + uCen[pi][1] * uCen[pi][1];
+        sumPSq += pRot[pi][0] * pRot[pi][0] + pRot[pi][1] * pRot[pi][1];
+      }
+      var scaleF = sumPSq > 0.01 ? Math.sqrt(sumUSq / sumPSq) : 1;
+      var alignedPts = pRot.map(function(p) { return [uCx + p[0] * scaleF, uCy + p[1] * scaleF]; });
+
+      g.selectAll("line.preview-line").data(links).enter()
+        .append("line")
+        .attr("class", "preview-line")
+        .attr("x1", function(d) { return alignedPts[d[0]][0]; })
+        .attr("y1", function(d) { return alignedPts[d[0]][1]; })
+        .attr("x2", function(d) { return alignedPts[d[1]][0]; })
+        .attr("y2", function(d) { return alignedPts[d[1]][1]; });
+
+      g.selectAll("circle.preview-circle").data(alignedPts).enter()
+        .append("circle")
+        .attr("class", "preview-circle")
+        .attr("cx", function(d) { return d[0]; })
+        .attr("cy", function(d) { return d[1]; })
+        .attr("r", 5);
+
+      g.selectAll("text.preview-legend").data([null]).enter()
+        .append("text")
+        .attr("class", "preview-legend")
+        .attr("x", 10)
+        .attr("y", 20)
+        .style("fill", "#38bdf8")
+        .style("font-size", "11px")
+        .text("\u2014 \u2014 Constellation trouv\u00e9e (align\u00e9e)");
     }
 
     var stars = g.selectAll(".star-circle")
