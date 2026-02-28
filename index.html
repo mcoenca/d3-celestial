@@ -26,8 +26,27 @@
       color: #ccc;
       font-size: 14px;
     }
+    #celestial-map-wrapper {
+      width: 100%;
+      overflow: hidden;
+    }
     #celestial-map {
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      display: block;
       margin: 0 auto;
+    }
+    #celestial-map canvas {
+      max-width: 100%;
+      height: auto;
+      display: block;
+      margin: 0 auto;
+    }
+    @media (max-width: 640px) {
+      body {
+        padding: 12px;
+      }
     }
   </style>
 </head>
@@ -37,7 +56,7 @@
     Vue centrée sur le zénith depuis Paris | Constellations du zodiaque uniquement | Magnitude limitée à 6 | Zoom activé (molette de la souris)
     | <a href="demo/constellation-editor.html" style="color:#93c5fd;">Créer une constellation</a>
   </div>
-  <div style="overflow:hidden;"><div id="celestial-map"></div></div>
+  <div id="celestial-map-wrapper"><div id="celestial-map"></div></div>
 
   <div id="celestial-params" style="margin-top:16px; padding:12px; background:#1a1a1a; border-radius:8px; max-width:720px; margin-left:auto; margin-right:auto;">
     <div style="display:flex; flex-wrap:wrap; align-items:center; gap:16px; margin-bottom:12px;">
