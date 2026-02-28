@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>D3-Celestial - Ciel de Paris Aujourd'hui</title>
+  <script type="text/javascript" src="lib/d3.min.js"></script>
+  <script type="text/javascript" src="lib/d3.geo.projection.min.js"></script>
+  <script type="text/javascript" src="celestial.min.js"></script>
+  <link rel="stylesheet" href="celestial.css">
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      background-color: #000;
+      color: #fff;
+      font-family: Arial, sans-serif;
+    }
+    h1 {
+      text-align: center;
+      margin-bottom: 10px;
+    }
+    .info {
+      text-align: center;
+      margin-bottom: 20px;
+      color: #ccc;
+      font-size: 14px;
+    }
+    #celestial-map {
+      margin: 0 auto;
+    }
+  </style>
+</head>
+<body>
+  <h1>Ciel de Paris - Aujourd'hui</h1>
+  <div class="info">
+    Vue centrée sur le zénith depuis Paris | Constellations du zodiaque uniquement | Magnitude limitée à 6 | Zoom activé (molette de la souris)
+    | <a href="demo/constellation-editor.html" style="color:#93c5fd;">Créer une constellation</a>
+  </div>
+  <div style="overflow:hidden;"><div id="celestial-map"></div></div>
+
+  <div id="celestial-params" style="margin-top:16px; padding:12px; background:#1a1a1a; border-radius:8px; max-width:720px; margin-left:auto; margin-right:auto;">
+    <div style="display:flex; flex-wrap:wrap; align-items:center; gap:16px; margin-bottom:12px;">
+      <label style="display:inline-flex; align-items:center; gap:8px; cursor:pointer;">
+        <input type="checkbox" id="debug-constellation-images" />
+        <span>Debug</span>
+      </label>
+      <span style="color:#888; font-size:12px;">— boîte et direction prioritaire</span>
+    </div>
+    <div id="aspect-panel" style="border-top:1px solid #333; padding-top:12px;">
+      <div style="font-weight:bold; margin-bottom:8px; color:#ccc;">Aspect de l'affichage</div>
+      <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap:16px;">
+        <fieldset style="border:1px solid #444; border-radius:6px; padding:10px;">
+          <legend style="color:#aaa;">Lignes de constellations</legend>
+          <label style="display:flex; align-items:center; gap:8px; margin-bottom:6px;"><input type="checkbox" id="aspect-const-lines-show" checked /> Afficher</label>
+          <label style="display:flex; align-items:center; gap:8px; font-size:13px;">Épaisseur <input type="range" id="aspect-const-width" min="0.5" max="6" step="0.25" style="flex:1;" /><span id="aspect-const-width-val">2.5</span></label>
+          <label style="display:flex; align-items:center; gap:8px; font-size:13px;">Opacité <input type="range" id="aspect-const-opacity" min="0.1" max="1" step="0.05" style="flex:1;" /><span id="aspect-const-opacity-val">0.8</span></label>
+        </fieldset>
+        <fieldset style="border:1px solid #444; border-radius:6px; padding:10px;">
+          <legend style="color:#aaa;">Étoiles (points)</legend>
+          <label style="display:flex; align-items:center; gap:8px; margin-bottom:6px;"><input type="checkbox" id="aspect-stars-show" checked /> Afficher</label>
+          <label style="display:flex; align-items:center; gap:8px; font-size:13px;">Taille de base <input type="range" id="aspect-stars-size" min="1" max="20" step="0.5" style="flex:1;" /><span id="aspect-stars-size-val">7</span></label>
+          <label style="display:flex; align-items:center; gap:8px; font-size:13px;">Facteur luminosité (exponent) <input type="range" id="aspect-stars-exponent" min="-0.6" max="0" step="0.02" style="flex:1;" /><span id="aspect-stars-exponent-val">-0.28</span></label>
+        </fieldset>
+        <fieldset style="border:1px solid #444; border-radius:6px; padding:10px;">
+          <legend style="color:#aaa;">Lignes d'univers (grille, équateur, écliptique)</legend>
+          <label style="display:flex; align-items:center; gap:8px; margin-bottom:4px;"><input type="checkbox" id="aspect-line-graticule" checked /> Graticule</label>
+          <label style="display:flex; align-items:center; gap:8px; margin-bottom:4px;"><input type="checkbox" id="aspect-line-equatorial" checked /> Équatorial</label>
+          <label style="display:flex; align-items:center; gap:8px; margin-bottom:6px;"><input type="checkbox" id="aspect-line-ecliptic" checked /> Écliptique</label>
+          <label style="display:flex; align-items:center; gap:8px; font-size:13px;">Épaisseur <input type="range" id="aspect-universe-width" min="0.2" max="3" step="0.1" style="flex:1;" /><span id="aspect-universe-width-val">0.8</span></label>
+          <label style="display:flex; align-items:center; gap:8px; font-size:13px;">Opacité <input type="range" id="aspect-universe-opacity" min="0.2" max="1" step="0.05" style="flex:1;" /><span id="aspect-universe-opacity-val">0.75</span></label>
+        </fieldset>
+      </div>
+    </div>
+  </div>
+
+  <script type="text/javascript">
+
+var config = {
+  width: 0,
+  projection: "airy",
+  transform: "equatorial",
+  background: { fill: "#000000", stroke: "#ffffff", width: 5, opacity: 1 },
+  
+  adaptable: false,
+  interactive: true,
+  disableAnimations: true,
+  form: false,
+  controls: true,
+  follow: "zenith",
+  
+  location: true,
+  geopos: [48.8566, 2.3522],
+  formFields: {"location": false, "general": false, "stars": false, "dsos": false, 
+                "constellations": false, "lines": false, "other": false, download: false},
+  
+  container: "celestial-map",
+  datapath: "data/",
+  lang: "fr",
+  
+  stars: {
+    show: true,
+    limit: 6,
+    colors: true,
+    style: { fill: "#ffffff", opacity: 1 },
+    names: false,
+    proper: false,
+    desig: false,
+    namelimit: 2.5,
+    namestyle: { fill: "#ddddbb", font: "12px 'Palatino Linotype', Georgia, Times, serif", align: "left", baseline: "top" },
+    propernamestyle: { fill: "#ddddbb", font: "13px 'Palatino Linotype', Georgia, Times, serif", align: "right", baseline: "bottom" },
+    propernamelimit: 1.0,
+    size: 7,
+    exponent: -0.28,
+    data: "stars.6.json"
+  },
+  
+  dsos: {
+    show: false,
+    limit: 6
+  },
+  
+  constellations: {
+    show: true,
+    names: true,
+    namesType: "fr",
+    desig: false,
+    namestyle: { fill: "#cccc99", align: "center", baseline: "middle", opacity: 0.8,
+                 font: ["bold 14px Helvetica, Arial, sans-serif",
+                        "bold 12px Helvetica, Arial, sans-serif",
+                        "bold 11px Helvetica, Arial, sans-serif"]},
+    lines: true,
+    linestyle: { stroke: "#cccccc", width: 2.5, opacity: 0.8 },
+    bounds: false
+  },
+  
+  mw: {
+    show: true,
+    style: { fill: "#ffffff", opacity: "0.15" }
+  },
+  
+  lines: {
+    graticule: { show: true, stroke: "#cccccc", width: 0.6, opacity: 0.8,
+      lon: {pos: ["center"], fill: "#eee", font: "10px Helvetica, Arial, sans-serif"},
+      lat: {pos: ["center"], fill: "#eee", font: "10px Helvetica, Arial, sans-serif"}},
+    equatorial: { show: true, stroke: "#aaaaaa", width: 1.3, opacity: 0.7 },
+    ecliptic: { show: true, stroke: "#66cc66", width: 1.3, opacity: 0.7 },
+    galactic: { show: false, stroke: "#cc6666", width: 1.3, opacity: 0.7 },
+    supergalactic: { show: false, stroke: "#cc66cc", width: 1.3, opacity: 0.7 }
+  }
+};
+
+var CUSTOM_STORAGE_KEY = "customConstellations";
+var customConstList = [];
+
+function getCustomConstellations() {
+  try {
+    var raw = localStorage.getItem(CUSTOM_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function mergeCustomConstellationsFromFile(listFromFile) {
+  if (!listFromFile || !listFromFile.length) return;
+  var list = getCustomConstellations();
+  list = list.concat(listFromFile);
+  localStorage.setItem(CUSTOM_STORAGE_KEY, JSON.stringify(list));
+  customConstList = list;
+}
+
+function addCustomConstellationsToMap() {
+  customConstList = getCustomConstellations();
+  if (customConstList.length === 0) return;
+  var fc = { type: "FeatureCollection", features: customConstList };
+  var transformed = Celestial.getData(fc, config.transform);
+  Celestial.container.selectAll(".custom-const").remove();
+  Celestial.container.selectAll(".custom-const")
+    .data(transformed.features)
+    .enter().append("path")
+    .attr("class", "custom-const");
+  Celestial.redraw();
+}
+
+fetch("config/custom-stars.json")
+  .then(function(r) { return r.ok ? r.json() : null; })
+  .then(function(data) {
+    if (data && data.constellations && data.constellations.length) {
+      mergeCustomConstellationsFromFile(data.constellations);
+    }
+  })
+  .catch(function() {})
+  .then(function() {
+    customConstList = getCustomConstellations();
+    if (typeof addCustomConstellationsToMap === "function") {
+      setTimeout(addCustomConstellationsToMap, 600);
+    }
+    if (typeof loadConstellationImages === "function") {
+      setTimeout(loadConstellationImages, 800);
+    }
+  });
+
+function applyDisplayConfig() {
+  var rot, sc;
+  if (Celestial.mapProjection) {
+    rot = Celestial.mapProjection.rotate().slice();
+    sc = Celestial.mapProjection.scale();
+  }
+  Celestial.display(config);
+  if (Celestial.mapProjection && rot != null) {
+    Celestial.mapProjection.rotate(rot);
+    Celestial.mapProjection.scale(sc);
+  }
+  Celestial.redraw();
+  fixZoomNoRotation();
+}
+
+function fixZoomNoRotation() {
+  var canvas = d3.select("#celestial-map canvas");
+  if (!canvas.node()) return;
+  var fixedRotation = Celestial.mapProjection.rotate().slice();
+  canvas.on("mousedown.zoom", null);
+  canvas.on("touchstart.zoom", null);
+  var originalZoom = canvas.on("zoom");
+  canvas.on("zoom", function() {
+    Celestial.mapProjection.rotate(fixedRotation);
+    if (originalZoom) originalZoom.apply(this, arguments);
+  });
+}
+
+Celestial.display(config);
+
+setTimeout(function() {
+  fixZoomNoRotation();
+  
+  Celestial.add({
+    type: "raw",
+    callback: function() {},
+    redraw: function() {
+      var canvas = d3.select("#celestial-map canvas");
+      if (!canvas.node()) return;
+      
+      var context = canvas.node().getContext("2d");
+      var metrics = Celestial.metrics();
+      var centerX = metrics.width / 2;
+      var centerY = metrics.height / 2;
+      var radius = Math.min(metrics.width, metrics.height) / 2;
+      
+      if (Object.keys(constellationImageCache).length > 0) {
+        var mergedOrientation = getMergedConstellationOrientation();
+        context.save();
+        context.globalAlpha = 0.7;
+
+        for (var constId in constellationImageCache) {
+          var img = constellationImageCache[constId];
+          if (!img || !img.complete || img.naturalWidth === 0) continue;
+
+          var constInfo = Celestial.constellations && Celestial.constellations[constId];
+          var centerCoords = null;
+          var defaultScale = 200;
+          var customFeature = null;
+          if (constInfo && constInfo.center && constInfo.center.length >= 2) {
+            centerCoords = constInfo.center;
+            defaultScale = constInfo.scale ? constInfo.scale * 4 : 200;
+          } else {
+            customConstList.forEach(function(f) {
+              if (f && f.id === constId && f.properties && f.properties.loc) customFeature = f;
+            });
+            if (customFeature) centerCoords = customFeature.properties.loc;
+          }
+          if (!centerCoords || centerCoords.length < 2) continue;
+
+          var isVisible = true;
+          if (typeof Celestial.clip === "function") {
+            isVisible = Celestial.clip(centerCoords);
+          }
+          if (!isVisible) continue;
+
+          var projectedCenter = Celestial.mapProjection(centerCoords);
+          if (!projectedCenter || isNaN(projectedCenter[0]) || isNaN(projectedCenter[1])) continue;
+          var centerX_img = projectedCenter[0];
+          var centerY_img = projectedCenter[1];
+
+          var extent = null;
+          function computeExtentFromCoords(coords) {
+            var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            for (var si = 0; si < coords.length; si++) {
+              for (var pj = 0; pj < coords[si].length; pj++) {
+                var pt = Celestial.mapProjection(coords[si][pj]);
+                if (pt && !isNaN(pt[0]) && !isNaN(pt[1])) {
+                  if (pt[0] < minX) minX = pt[0];
+                  if (pt[1] < minY) minY = pt[1];
+                  if (pt[0] > maxX) maxX = pt[0];
+                  if (pt[1] > maxY) maxY = pt[1];
+                }
+              }
+            }
+            if (minX === Infinity) return null;
+            var w = maxX - minX, h = maxY - minY;
+            var padding = 15;
+            return {
+              width: w + padding * 2,
+              height: h + padding * 2
+            };
+          }
+          if (constInfo) {
+            d3.select("#celestial-map").selectAll(".constline").each(function(d) {
+              if (!d || d.id !== constId || !d.geometry || !d.geometry.coordinates) return;
+              extent = computeExtentFromCoords(d.geometry.coordinates);
+            });
+          } else if (customFeature && customFeature.geometry && customFeature.geometry.coordinates) {
+            extent = computeExtentFromCoords(customFeature.geometry.coordinates);
+          }
+
+          var imageSize;
+          var savedScale = customFeature && customFeature.properties && customFeature.properties.imageScale;
+          if (extent && extent.width > 0 && extent.height > 0) {
+            var extentMax = Math.max(extent.width, extent.height);
+            imageSize = savedScale != null && typeof savedScale === "number" ? extentMax * savedScale : extentMax;
+          } else {
+            imageSize = defaultScale;
+          }
+
+          var orient = mergedOrientation && mergedOrientation[constId];
+          var angleRad = 0;
+          if (orient !== undefined && orient !== null) {
+            if (typeof orient === "number") {
+              angleRad = -orient * Math.PI / 180;
+            } else if (Array.isArray(orient) && orient.length >= 2) {
+              var projHead = Celestial.mapProjection(orient);
+              if (projHead && !isNaN(projHead[0])) {
+                var dx = projHead[0] - centerX_img, dy = projHead[1] - centerY_img;
+                angleRad = Math.atan2(dy, dx) + Math.PI / 4;
+              }
+            }
+          }
+
+          try {
+            context.save();
+            context.translate(centerX_img, centerY_img);
+            context.rotate(angleRad);
+            context.drawImage(img, -imageSize / 2, -imageSize / 2, imageSize, imageSize);
+            if (window.debugConstellationImages) {
+              context.strokeStyle = "#ff0000";
+              context.lineWidth = 2;
+              context.strokeRect(-imageSize / 2, -imageSize / 2, imageSize, imageSize);
+              context.beginPath();
+              context.moveTo(0, 0);
+              context.lineTo(imageSize / 2, -imageSize / 2);
+              context.stroke();
+            }
+            context.restore();
+          } catch (e) {
+            console.error("Erreur dessin image pour", constId, ":", e);
+          }
+        }
+
+        context.restore();
+      }
+      
+      context.save();
+      context.strokeStyle = "#ffffff";
+      context.lineWidth = 5;
+      context.beginPath();
+      context.arc(centerX, centerY, radius, 0, 2 * Math.PI);
+      context.stroke();
+      context.restore();
+    }
+  });
+  
+  Celestial.add({
+    type: "line",
+    callback: function() {
+      addCustomConstellationsToMap();
+    },
+    redraw: function() {
+      var lineStyle = { stroke: "#a78bfa", fill: "none", width: 2.5, opacity: 0.9 };
+      Celestial.container.selectAll(".custom-const").each(function(d) {
+        if (!d || !d.geometry || !d.geometry.coordinates) return;
+        Celestial.setStyle(lineStyle);
+        Celestial.map(d);
+        Celestial.context.stroke();
+        if (d.properties && d.properties.loc && typeof Celestial.clip === "function" && Celestial.clip(d.properties.loc)) {
+          var pt = Celestial.mapProjection(d.properties.loc);
+          if (pt && !isNaN(pt[0])) {
+            Celestial.setTextStyle({ fill: "#c4b5fd", font: "bold 12px Helvetica, Arial, sans-serif", align: "center", baseline: "middle" });
+            var name = (d.properties.fr || d.properties.n || d.id || "");
+            Celestial.context.fillText(name, pt[0], pt[1]);
+          }
+        }
+      });
+    }
+  });
+
+  Celestial.redraw();
+  
+  setTimeout(function() {
+    addCustomConstellationsToMap();
+  }, 500);
+
+  setTimeout(function() {
+    console.log("Tentative de chargement des images. Constellations disponibles:", Object.keys(Celestial.constellations || {}));
+    loadConstellationImages();
+  }, 2000);
+}, 1000);
+
+var zodiacConstellations = ["Ari", "Tau", "Gem", "Cnc", "Leo", "Vir", "Lib", "Sco", "Sgr", "Cap", "Aqr", "Psc"];
+
+var constellationImages = {
+   "Leo": "images/lion.png",
+   "UMi": "images/lion.png",
+};
+
+var constellationOrientation = {
+  "Leo": [152, 24],
+  "UMi": [37.95, 89.26],
+};
+
+window.debugConstellationImages = false;
+
+var constellationImageCache = {};
+function iconifyUrlWithColor(url, color) {
+  if (!url || url.indexOf("api.iconify.design") === -1) return url;
+  var sep = url.indexOf("?") !== -1 ? "&" : "?";
+  return url + sep + "color=" + encodeURIComponent(color || "#ffffff");
+}
+function getMergedConstellationImages() {
+  var merged = {};
+  var k;
+  for (k in constellationImages) { merged[k] = constellationImages[k]; }
+  var list = getCustomConstellations();
+  for (var i = 0; i < list.length; i++) {
+    var f = list[i];
+    if (f && f.properties && f.properties.image) {
+      var url = f.properties.image;
+      var color = (f.properties && f.properties.iconColor) ? f.properties.iconColor : "#ffffff";
+      merged[f.id] = iconifyUrlWithColor(url, color);
+    }
+  }
+  return merged;
+}
+function getMergedConstellationOrientation() {
+  var merged = {};
+  var k;
+  for (k in constellationOrientation) { merged[k] = constellationOrientation[k]; }
+  var list = getCustomConstellations();
+  for (var i = 0; i < list.length; i++) {
+    var f = list[i];
+    if (f && f.properties && f.properties.orientation != null) {
+      merged[f.id] = f.properties.orientation;
+    }
+  }
+  return merged;
+}
+function loadConstellationImages() {
+  var allImages = getMergedConstellationImages();
+  var total = Object.keys(allImages).length;
+  var loaded = 0;
+
+  console.log("Chargement de", total, "images de constellations (built-in + custom)");
+
+  if (total === 0) {
+    return;
+  }
+
+  function onDone() {
+    loaded++;
+    if (loaded === total) {
+      console.log("Toutes les images sont chargées, redessin...");
+      if (typeof Celestial !== "undefined" && Celestial.redraw) Celestial.redraw();
+    }
+  }
+
+  for (var constId in allImages) {
+    var imagePath = allImages[constId];
+    var img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = function(id, path) {
+      return function() {
+        console.log("Image chargée pour", id);
+        onDone();
+      };
+    }(constId, imagePath);
+    img.onerror = function(id, path) {
+      return function() {
+        console.error("Impossible de charger l'image pour:", id);
+        onDone();
+      };
+    }(constId, imagePath);
+    img.src = imagePath;
+    constellationImageCache[constId] = img;
+  }
+}
+
+setTimeout(function() {
+  d3.selectAll(".constname").each(function(d) {
+    if (d && d.id && zodiacConstellations.indexOf(d.id) === -1) {
+      d3.select(this).style("display", "none");
+    }
+  });
+  
+  d3.selectAll(".constline").each(function(d) {
+    if (d && d.id && zodiacConstellations.indexOf(d.id) === -1) {
+      d3.select(this).style("display", "none");
+    }
+  });
+  
+  d3.selectAll(".boundaryline").each(function(d) {
+    if (d && d.id && zodiacConstellations.indexOf(d.id) === -1) {
+      d3.select(this).style("display", "none");
+    }
+  });
+}, 2500);
+
+setTimeout(function() {
+  var now = new Date();
+  now.setHours(22, 0, 0, 0);
+  
+  Celestial.skyview({
+    "date": now
+  });
+}, 1000);
+
+(function() {
+  var cb = document.getElementById("debug-constellation-images");
+  if (cb) {
+    cb.checked = window.debugConstellationImages;
+    cb.addEventListener("change", function() {
+      window.debugConstellationImages = cb.checked;
+      if (typeof Celestial !== "undefined" && Celestial.redraw) Celestial.redraw();
+    });
+  }
+})();
+
+(function() {
+  function fromConfig() {
+    var c = config.constellations, s = config.stars, l = config.lines;
+    var gw = document.getElementById("aspect-const-width"), go = document.getElementById("aspect-const-opacity");
+    var cs = document.getElementById("aspect-const-lines-show");
+    if (gw) { gw.value = c.linestyle.width; document.getElementById("aspect-const-width-val").textContent = c.linestyle.width; }
+    if (go) { go.value = c.linestyle.opacity; document.getElementById("aspect-const-opacity-val").textContent = c.linestyle.opacity; }
+    if (cs) cs.checked = c.lines;
+    var ss = document.getElementById("aspect-stars-show"), sz = document.getElementById("aspect-stars-size"), ex = document.getElementById("aspect-stars-exponent");
+    if (ss) ss.checked = s.show;
+    if (sz) { sz.value = s.size; document.getElementById("aspect-stars-size-val").textContent = s.size; }
+    if (ex) { ex.value = s.exponent; document.getElementById("aspect-stars-exponent-val").textContent = s.exponent; }
+    var lg = document.getElementById("aspect-line-graticule"), leq = document.getElementById("aspect-line-equatorial"), lec = document.getElementById("aspect-line-ecliptic");
+    if (lg) lg.checked = l.graticule.show;
+    if (leq) leq.checked = l.equatorial.show;
+    if (lec) lec.checked = l.ecliptic.show;
+    var uw = document.getElementById("aspect-universe-width"), uo = document.getElementById("aspect-universe-opacity");
+    var w = (l.graticule.width + l.equatorial.width + l.ecliptic.width) / 3;
+    var o = (l.graticule.opacity + l.equatorial.opacity + l.ecliptic.opacity) / 3;
+    if (uw) { uw.value = w; document.getElementById("aspect-universe-width-val").textContent = Number(w).toFixed(1); }
+    if (uo) { uo.value = o; document.getElementById("aspect-universe-opacity-val").textContent = Number(o).toFixed(2); }
+  }
+  function toConfigAndRedraw() {
+    var c = config.constellations, s = config.stars, l = config.lines;
+    var gw = document.getElementById("aspect-const-width"), go = document.getElementById("aspect-const-opacity");
+    var cs = document.getElementById("aspect-const-lines-show");
+    if (cs) c.lines = cs.checked;
+    if (gw) { c.linestyle.width = parseFloat(gw.value); document.getElementById("aspect-const-width-val").textContent = gw.value; }
+    if (go) { c.linestyle.opacity = parseFloat(go.value); document.getElementById("aspect-const-opacity-val").textContent = go.value; }
+    var ss = document.getElementById("aspect-stars-show"), sz = document.getElementById("aspect-stars-size"), ex = document.getElementById("aspect-stars-exponent");
+    if (ss) s.show = ss.checked;
+    if (sz) { s.size = parseFloat(sz.value); document.getElementById("aspect-stars-size-val").textContent = sz.value; }
+    if (ex) { s.exponent = parseFloat(ex.value); document.getElementById("aspect-stars-exponent-val").textContent = ex.value; }
+    var lg = document.getElementById("aspect-line-graticule"), leq = document.getElementById("aspect-line-equatorial"), lec = document.getElementById("aspect-line-ecliptic");
+    if (lg) l.graticule.show = lg.checked;
+    if (leq) l.equatorial.show = leq.checked;
+    if (lec) l.ecliptic.show = lec.checked;
+    var uw = document.getElementById("aspect-universe-width"), uo = document.getElementById("aspect-universe-opacity");
+    var w = uw ? parseFloat(uw.value) : 0.8, o = uo ? parseFloat(uo.value) : 0.75;
+    if (uw) document.getElementById("aspect-universe-width-val").textContent = uw.value;
+    if (uo) document.getElementById("aspect-universe-opacity-val").textContent = uo.value;
+    l.graticule.width = l.equatorial.width = l.ecliptic.width = w;
+    l.graticule.opacity = l.equatorial.opacity = l.ecliptic.opacity = o;
+    if (typeof Celestial !== "undefined" && Celestial.display) applyDisplayConfig();
+  }
+  fromConfig();
+  ["aspect-const-lines-show", "aspect-const-width", "aspect-const-opacity",
+   "aspect-stars-show", "aspect-stars-size", "aspect-stars-exponent",
+   "aspect-line-graticule", "aspect-line-equatorial", "aspect-line-ecliptic",
+   "aspect-universe-width", "aspect-universe-opacity"].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener("input", toConfigAndRedraw);
+    el.addEventListener("change", toConfigAndRedraw);
+  });
+})();
+
+  </script>
+
+</body>
+</html>
