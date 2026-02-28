@@ -26,8 +26,27 @@
       color: #ccc;
       font-size: 14px;
     }
+    #celestial-map-wrapper {
+      width: 100%;
+      overflow: hidden;
+    }
     #celestial-map {
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      display: block;
       margin: 0 auto;
+    }
+    #celestial-map canvas {
+      max-width: 100%;
+      height: auto;
+      display: block;
+      margin: 0 auto;
+    }
+    @media (max-width: 640px) {
+      body {
+        padding: 12px;
+      }
     }
   </style>
 </head>
@@ -37,7 +56,7 @@
     Vue centrée sur le zénith depuis Paris | Constellations du zodiaque uniquement | Magnitude limitée à 6 | Zoom activé (molette de la souris)
     | <a href="demo/constellation-editor.html" style="color:#93c5fd;">Créer une constellation</a>
   </div>
-  <div style="overflow:hidden;"><div id="celestial-map"></div></div>
+  <div id="celestial-map-wrapper"><div id="celestial-map"></div></div>
 
   <div id="celestial-params" style="margin-top:16px; padding:12px; background:#1a1a1a; border-radius:8px; max-width:720px; margin-left:auto; margin-right:auto;">
     <div style="display:flex; flex-wrap:wrap; align-items:center; gap:16px; margin-bottom:12px;">
@@ -152,6 +171,55 @@ var config = {
 
 var CUSTOM_STORAGE_KEY = "customConstellations";
 var customConstList = [];
+var DISPLAY_PRESETS = {
+  desktop: {
+    starsSize: 7,
+    constellationFonts: [
+      "bold 14px Helvetica, Arial, sans-serif",
+      "bold 12px Helvetica, Arial, sans-serif",
+      "bold 11px Helvetica, Arial, sans-serif"
+    ],
+    constellationLineWidth: 2.5,
+    graticuleWidth: 0.6,
+    equatorialWidth: 1.3,
+    eclipticWidth: 1.3
+  },
+  mobile: {
+    starsSize: 4.5,
+    constellationFonts: [
+      "bold 10px Helvetica, Arial, sans-serif",
+      "bold 9px Helvetica, Arial, sans-serif",
+      "bold 8px Helvetica, Arial, sans-serif"
+    ],
+    constellationLineWidth: 1.3,
+    graticuleWidth: 0.35,
+    equatorialWidth: 0.75,
+    eclipticWidth: 0.75
+  }
+};
+var activeDisplayPreset = null;
+
+function isMobileViewport() {
+  return window.matchMedia("(max-width: 640px)").matches;
+}
+
+function applyResponsiveVisualDefaults(force) {
+  var presetKey = isMobileViewport() ? "mobile" : "desktop";
+  if (!force && presetKey === activeDisplayPreset) return false;
+  var preset = DISPLAY_PRESETS[presetKey];
+  config.stars.size = preset.starsSize;
+  config.constellations.namestyle.font = preset.constellationFonts.slice();
+  config.constellations.linestyle.width = preset.constellationLineWidth;
+  config.lines.graticule.width = preset.graticuleWidth;
+  config.lines.equatorial.width = preset.equatorialWidth;
+  config.lines.ecliptic.width = preset.eclipticWidth;
+  activeDisplayPreset = presetKey;
+  return true;
+}
+
+function getCustomConstellationLabelFont() {
+  return isMobileViewport() ? "bold 10px Helvetica, Arial, sans-serif" : "bold 12px Helvetica, Arial, sans-serif";
+}
 
 function getCustomConstellations() {
   try {
@@ -229,7 +297,18 @@ function fixZoomNoRotation() {
   });
 }
 
+applyResponsiveVisualDefaults(true);
 Celestial.display(config);
+
+var mobileViewportQuery = window.matchMedia("(max-width: 640px)");
+function onViewportPresetChange() {
+  if (applyResponsiveVisualDefaults(false) && typeof Celestial !== "undefined" && Celestial.display) {
+    applyDisplayConfig();
+    if (typeof window.syncAspectPanelFromConfig === "function") window.syncAspectPanelFromConfig();
+  }
+}
+if (mobileViewportQuery.addEventListener) mobileViewportQuery.addEventListener("change", onViewportPresetChange);
+else if (mobileViewportQuery.addListener) mobileViewportQuery.addListener(onViewportPresetChange);
 
 setTimeout(function() {
   fixZoomNoRotation();
@@ -403,7 +482,7 @@ setTimeout(function() {
       addCustomConstellationsToMap();
     },
     redraw: function() {
-      var lineStyle = { stroke: "#a78bfa", fill: "none", width: 2.5, opacity: 0.9 };
+      var lineStyle = { stroke: "#a78bfa", fill: "none", width: config.constellations.linestyle.width, opacity: 0.9 };
       Celestial.container.selectAll(".custom-const").each(function(d) {
         if (!d || !d.geometry || !d.geometry.coordinates) return;
         Celestial.setStyle(lineStyle);
@@ -412,7 +491,7 @@ setTimeout(function() {
         if (d.properties && d.properties.loc && typeof Celestial.clip === "function" && Celestial.clip(d.properties.loc)) {
           var pt = Celestial.mapProjection(d.properties.loc);
           if (pt && !isNaN(pt[0])) {
-            Celestial.setTextStyle({ fill: "#c4b5fd", font: "bold 12px Helvetica, Arial, sans-serif", align: "center", baseline: "middle" });
+            Celestial.setTextStyle({ fill: "#c4b5fd", font: getCustomConstellationLabelFont(), align: "center", baseline: "middle" });
             var name = (d.properties.fr || d.properties.n || d.id || "");
             Celestial.context.fillText(name, pt[0], pt[1]);
           }
@@ -606,6 +685,7 @@ setTimeout(function() {
     l.graticule.opacity = l.equatorial.opacity = l.ecliptic.opacity = o;
     if (typeof Celestial !== "undefined" && Celestial.display) applyDisplayConfig();
   }
+  window.syncAspectPanelFromConfig = fromConfig;
   fromConfig();
   ["aspect-const-lines-show", "aspect-const-width", "aspect-const-opacity",
    "aspect-stars-show", "aspect-stars-size", "aspect-stars-exponent",
