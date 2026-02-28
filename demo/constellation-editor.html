@@ -304,7 +304,15 @@
     <aside id="match-panel">
       <h2>Recherche dans le catalogue</h2>
       <p style="font-size:12px; color:#94a3b8; margin-bottom:10px;">Trouve des étoiles du catalogue dont la forme ressemble à votre constellation.</p>
-      <button type="button" class="secondary" id="btn-match-search" style="width:100%; margin-bottom:12px;">Rechercher une correspondance</button>
+      <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px; flex-wrap:wrap;">
+        <label for="match-algorithm" style="font-size:12px; color:#94a3b8;">Algorithme</label>
+        <select id="match-algorithm" style="flex:1; min-width:160px; padding:6px 8px; border-radius:6px; border:1px solid #334155; background:#1e293b; color:#e2e8f0;">
+          <option value="rms">RMS seul</option>
+          <option value="rms-angles">RMS + angles</option>
+          <option value="ratios-angles">Ratios + angles</option>
+        </select>
+        <button type="button" class="secondary" id="btn-match-search" style="flex:1; min-width:120px;">Rechercher une correspondance</button>
+      </div>
       <div id="match-progress" class="progress-section" style="display:none;">
         <div>Opérations : <span id="match-ops-done">0</span> / <span id="match-ops-total">0</span></div>
         <div class="progress-bar-wrap"><div id="match-progress-bar" class="progress-bar"></div></div>
@@ -559,10 +567,14 @@
       var i = edge[0], j = edge[1];
       return i >= 0 && i < editorState.stars.length && j >= 0 && j < editorState.stars.length && i !== j;
     });
+    var alignedPreviewRaDec = null;
+    if (previewCandidateCoords && previewCandidateCoords.length === editorState.stars.length && editorState.stars.length >= 2 && links.length >= 1) {
+      alignedPreviewRaDec = alignCandidateToUserInRaDec(editorState.stars, previewCandidateCoords, links);
+    }
     var angleDiffs = null;
     var maxAngleDiff = 0;
-    if (previewCandidateCoords && previewCandidateCoords.length === editorState.stars.length) {
-      angleDiffs = computeAngleDiffAtVertices(editorState.stars, previewCandidateCoords, links);
+    if (alignedPreviewRaDec) {
+      angleDiffs = computeAngleDiffAtVertices(editorState.stars, alignedPreviewRaDec, links);
       maxAngleDiff = Math.max.apply(null, angleDiffs);
       if (maxAngleDiff < 1e-6) maxAngleDiff = 1;
     }
@@ -634,54 +646,48 @@
         });
     }
 
-    // --- Overlay en pointillé : constellation trouvée par l'algorithme, alignée sur la constellation créée ---
+    // --- Overlay en pointillé : constellation trouvée, alignée sur le 1er segment de la forme créée ---
     g.selectAll("line.preview-line").remove();
     g.selectAll("circle.preview-circle").remove();
     g.selectAll("text.preview-legend").remove();
-    if (previewCandidateCoords && previewCandidateCoords.length === editorState.stars.length && editorState.stars.length >= 2) {
+    g.selectAll("text.preview-angle-legend").remove();
+    if (previewCandidateCoords && previewCandidateCoords.length === editorState.stars.length && editorState.stars.length >= 2 && links.length >= 1) {
+      var refI0 = links[0][0], refI1 = links[0][1];
       var userScreenPts = editorState.stars.map(function(s) {
         var p = Celestial.mapProjection(s);
         return p ? [p[0], p[1]] : [0, 0];
       });
-      var prevScreenPts = previewCandidateCoords.map(function(s) {
+      var candScreenPts = previewCandidateCoords.map(function(s) {
         var p = Celestial.mapProjection(s);
         return p ? [p[0], p[1]] : [0, 0];
       });
-      var nPts = userScreenPts.length;
-      var uCx = 0, uCy = 0, pCx = 0, pCy = 0;
-      for (var pi = 0; pi < nPts; pi++) {
-        uCx += userScreenPts[pi][0]; uCy += userScreenPts[pi][1];
-        pCx += prevScreenPts[pi][0]; pCy += prevScreenPts[pi][1];
-      }
-      uCx /= nPts; uCy /= nPts;
-      pCx /= nPts; pCy /= nPts;
-      var uCen = userScreenPts.map(function(p) { return [p[0] - uCx, p[1] - uCy]; });
-      var pCen = prevScreenPts.map(function(p) { return [p[0] - pCx, p[1] - pCy]; });
-      var procNum = 0, procDen = 0;
-      for (var pi = 0; pi < nPts; pi++) {
-        procNum += uCen[pi][0] * pCen[pi][1] - uCen[pi][1] * pCen[pi][0];
-        procDen += uCen[pi][0] * pCen[pi][0] + uCen[pi][1] * pCen[pi][1];
-      }
-      var procTheta = Math.atan2(procNum, procDen);
-      var procCos = Math.cos(procTheta), procSin = Math.sin(procTheta);
-      var pRot = pCen.map(function(p) { return [p[0] * procCos - p[1] * procSin, p[0] * procSin + p[1] * procCos]; });
-      var sumUSq = 0, sumPSq = 0;
-      for (var pi = 0; pi < nPts; pi++) {
-        sumUSq += uCen[pi][0] * uCen[pi][0] + uCen[pi][1] * uCen[pi][1];
-        sumPSq += pRot[pi][0] * pRot[pi][0] + pRot[pi][1] * pRot[pi][1];
-      }
-      var scaleF = sumPSq > 0.01 ? Math.sqrt(sumUSq / sumPSq) : 1;
-      var alignedPts = pRot.map(function(p) { return [uCx + p[0] * scaleF, uCy + p[1] * scaleF]; });
+      var uA = userScreenPts[refI0], uB = userScreenPts[refI1];
+      var cA = candScreenPts[refI0], cB = candScreenPts[refI1];
+      var uDx = uB[0] - uA[0], uDy = uB[1] - uA[1];
+      var cDx = cB[0] - cA[0], cDy = cB[1] - cA[1];
+      var uLen = Math.sqrt(uDx * uDx + uDy * uDy);
+      var cLen = Math.sqrt(cDx * cDx + cDy * cDy);
+      var scaleF = cLen > 0.01 ? uLen / cLen : 1;
+      var uAngle = Math.atan2(uDy, uDx);
+      var cAngle = Math.atan2(cDy, cDx);
+      var rot = uAngle - cAngle;
+      var cosR = Math.cos(rot), sinR = Math.sin(rot);
+      var prevScreenPts = candScreenPts.map(function(p) {
+        var dx = p[0] - cA[0], dy = p[1] - cA[1];
+        var rx = dx * cosR - dy * sinR;
+        var ry = dx * sinR + dy * cosR;
+        return [uA[0] + rx * scaleF, uA[1] + ry * scaleF];
+      });
 
       g.selectAll("line.preview-line").data(links).enter()
         .append("line")
         .attr("class", "preview-line")
-        .attr("x1", function(d) { return alignedPts[d[0]][0]; })
-        .attr("y1", function(d) { return alignedPts[d[0]][1]; })
-        .attr("x2", function(d) { return alignedPts[d[1]][0]; })
-        .attr("y2", function(d) { return alignedPts[d[1]][1]; });
+        .attr("x1", function(d) { return prevScreenPts[d[0]][0]; })
+        .attr("y1", function(d) { return prevScreenPts[d[0]][1]; })
+        .attr("x2", function(d) { return prevScreenPts[d[1]][0]; })
+        .attr("y2", function(d) { return prevScreenPts[d[1]][1]; });
 
-      g.selectAll("circle.preview-circle").data(alignedPts).enter()
+      g.selectAll("circle.preview-circle").data(prevScreenPts).enter()
         .append("circle")
         .attr("class", "preview-circle")
         .attr("cx", function(d) { return d[0]; })
@@ -696,6 +702,14 @@
         .style("fill", "#38bdf8")
         .style("font-size", "11px")
         .text("\u2014 \u2014 Constellation trouv\u00e9e (align\u00e9e)");
+      g.selectAll("text.preview-angle-legend").data([null]).enter()
+        .append("text")
+        .attr("class", "preview-angle-legend")
+        .attr("x", 10)
+        .attr("y", 34)
+        .style("fill", "#94a3b8")
+        .style("font-size", "10px")
+        .text("Nombres = \u00e9cart d'angle au sommet (r\u00e9f. vs trouv\u00e9e), en \u00b0");
     }
 
     var stars = g.selectAll(".star-circle")
@@ -1186,18 +1200,47 @@
     return 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x)) / d2r;
   }
 
+  /** Aligne la forme candidate sur la forme utilisateur dans l'espace RA/Dec (similarité : translation, rotation, échelle). Retourne les coords candidat transformées. */
+  function alignCandidateToUserInRaDec(userStars, candStars, linkList) {
+    if (!linkList.length || userStars.length !== candStars.length) return candStars.map(function(c) { return c.slice(); });
+    var i0 = linkList[0][0], i1 = linkList[0][1];
+    var cxU = 0, cyU = 0, cxC = 0, cyC = 0;
+    for (var i = 0; i < userStars.length; i++) {
+      cxU += userStars[i][0]; cyU += userStars[i][1];
+      cxC += candStars[i][0]; cyC += candStars[i][1];
+    }
+    cxU /= userStars.length; cyU /= userStars.length;
+    cxC /= candStars.length; cyC /= candStars.length;
+    var L_user = angularDistanceDeg(userStars[i0][0], userStars[i0][1], userStars[i1][0], userStars[i1][1]);
+    var L_cand = angularDistanceDeg(candStars[i0][0], candStars[i0][1], candStars[i1][0], candStars[i1][1]);
+    if (L_cand < 1e-8) return candStars.map(function(c) { return c.slice(); });
+    var dirUser = Math.atan2(userStars[i1][1] - userStars[i0][1], userStars[i1][0] - userStars[i0][0]);
+    var dirCand = Math.atan2(candStars[i1][1] - candStars[i0][1], candStars[i1][0] - candStars[i0][0]);
+    var scale = L_user / L_cand;
+    var rot = dirUser - dirCand;
+    var cosR = Math.cos(rot), sinR = Math.sin(rot);
+    return candStars.map(function(p) {
+      var px = p[0] - cxC, py = p[1] - cyC;
+      var rx = px * cosR - py * sinR;
+      var ry = px * sinR + py * cosR;
+      return [cxU + scale * rx, cyU + scale * ry];
+    });
+  }
+
   function buildNormalizedModel() {
     var stars = editorState.stars;
     var links = editorState.links;
     if (stars.length < 2 || links.length < 1) return null;
     var i0 = links[0][0], i1 = links[0][1];
+    var parisView = stars.map(function(p) { return raDecToParisView(p[0], p[1]); });
     var cx = 0, cy = 0;
-    stars.forEach(function(p) { cx += p[0]; cy += p[1]; });
-    cx /= stars.length;
-    cy /= stars.length;
-    var L_ref = angularDistanceDeg(stars[i0][0], stars[i0][1], stars[i1][0], stars[i1][1]);
+    parisView.forEach(function(p) { cx += p[0]; cy += p[1]; });
+    cx /= parisView.length;
+    cy /= parisView.length;
+    var dx = parisView[i1][0] - parisView[i0][0], dy = parisView[i1][1] - parisView[i0][1];
+    var L_ref = Math.sqrt(dx * dx + dy * dy);
     if (L_ref < 1e-6) return null;
-    var norm = stars.map(function(p) {
+    var norm = parisView.map(function(p) {
       return [(p[0] - cx) / L_ref, (p[1] - cy) / L_ref];
     });
     return { points: norm, refEdge: [i0, i1], L_ref: L_ref };
@@ -1210,6 +1253,46 @@
   var MAX_CATALOG_STARS = 2000;
   var BATCH_SIZE = 5000;
   var TOP_K = 10;
+  /** Facteur pour égaliser l'importance RMS ratios vs RMS angles (score = rmsRatios + LAMBDA_RATIOS_ANGLES * rmsAngles). */
+  var LAMBDA_RATIOS_ANGLES = 0.02;
+
+  /** Pour une forme (coords) et une liste de segments (links), retourne { ratios: [L_i/L_0], angles: [angle(seg0, seg_i) en °]. */
+  /** useEuclidean: si true, coords sont en plan 2D (ex. vue Paris), distances euclidiennes. */
+  function buildSegmentDescriptors(linkList, coords, useEuclidean) {
+    if (!linkList.length) return { ratios: [], angles: [] };
+    var dist = useEuclidean
+      ? function(a, b) {
+          var dx = coords[b][0] - coords[a][0], dy = coords[b][1] - coords[a][1];
+          return Math.sqrt(dx * dx + dy * dy);
+        }
+      : function(a, b) {
+          return angularDistanceDeg(coords[a][0], coords[a][1], coords[b][0], coords[b][1]);
+        };
+    var L0 = dist(linkList[0][0], linkList[0][1]);
+    if (L0 < 1e-8) return { ratios: [], angles: [] };
+    var v0 = [
+      coords[linkList[0][1]][0] - coords[linkList[0][0]][0],
+      coords[linkList[0][1]][1] - coords[linkList[0][0]][1]
+    ];
+    var ratios = [];
+    var angles = [];
+    for (var idx = 0; idx < linkList.length; idx++) {
+      var a = linkList[idx][0], b = linkList[idx][1];
+      var L = dist(a, b);
+      ratios.push(L / L0);
+      var v = [coords[b][0] - coords[a][0], coords[b][1] - coords[a][1]];
+      var ang = angleBetweenVectorsDeg(v0, v);
+      angles.push(ang);
+    }
+    return { ratios: ratios, angles: angles };
+  }
+
+  function angleDiffNorm(a1, a2) {
+    var d = a1 - a2;
+    while (d > 180) d -= 360;
+    while (d < -180) d += 360;
+    return d;
+  }
 
   function buildGridIndex(starList) {
     var grid = {};
@@ -1225,6 +1308,38 @@
   }
 
   var PARIS_GEOPOS = [48.8566, 2.3522];
+  /** Date/heure de référence pour la "vue depuis Paris" (22h heure de Paris ≈ 21 UTC). */
+  function getParisViewDate() {
+    var dt = new Date();
+    dt.setUTCHours(21, 0, 0, 0);
+    return dt;
+  }
+
+  /** (RA, Dec) -> vue 2D depuis Paris : horizontales (alt, az) puis stéréographique depuis le zénith. Retourne [x, y]. */
+  function raDecToParisView(ra, dec) {
+    if (typeof Celestial === "undefined" || typeof Celestial.horizontal !== "function") return [ra, dec];
+    var dt = getParisViewDate();
+    var hor = Celestial.horizontal(dt, [ra, dec], PARIS_GEOPOS);
+    var alt = hor[0] * Math.PI / 180;
+    var az = hor[1] * Math.PI / 180;
+    var zenithAngle = Math.PI / 2 - alt;
+    var r = 2 * Math.tan(zenithAngle / 2);
+    return [r * Math.cos(az), r * Math.sin(az)];
+  }
+
+  /** Vue 2D Paris [x, y] (stéréographique) -> (RA, Dec). */
+  function parisViewToRaDec(x, y) {
+    if (typeof Celestial === "undefined" || typeof Celestial.horizontal === "undefined" || !Celestial.horizontal.inverse) return [x, y];
+    var r = Math.sqrt(x * x + y * y);
+    var azDeg = Math.atan2(y, x) * 180 / Math.PI;
+    if (azDeg < 0) azDeg += 360;
+    var zenithAngle = 2 * Math.atan(r / 2);
+    var altDeg = 90 - zenithAngle * 180 / Math.PI;
+    var dt = getParisViewDate();
+    var eq = Celestial.horizontal.inverse(dt, [altDeg, azDeg], PARIS_GEOPOS);
+    return [eq[0], eq[1]];
+  }
+
 
   function visibilityFromParis(coordsList) {
     if (!coordsList.length || typeof Celestial === "undefined" || typeof Celestial.horizontal !== "function") return "partiel";
@@ -1296,7 +1411,9 @@
         });
         features.sort(function(a, b) { return (a.properties.mag || 99) - (b.properties.mag || 99); });
         var starList = features.slice(0, MAX_CATALOG_STARS).map(function(f) {
-          return { id: f.id, coords: f.geometry.coordinates.slice(), mag: f.properties.mag };
+          var c = f.geometry.coordinates.slice();
+          var pv = raDecToParisView(c[0], c[1]);
+          return { id: f.id, coords: c, parisView: pv, mag: f.properties.mag };
         });
         var N = starList.length;
         var grid = buildGridIndex(starList);
@@ -1317,9 +1434,10 @@
           for (var b = done; b < batchEnd; b++) {
             var p = pairs[b];
             var i0 = p[0], i1 = p[1];
+            var p0 = starList[i0].parisView, p1 = starList[i1].parisView;
             var s0 = starList[i0].coords, s1 = starList[i1].coords;
-            var scaleDeg = angularDistanceDeg(s0[0], s0[1], s1[0], s1[1]);
-            var angleSky = Math.atan2(s1[1] - s0[1], s1[0] - s0[0]);
+            var scaleParis = Math.sqrt((p1[0] - p0[0]) * (p1[0] - p0[0]) + (p1[1] - p0[1]) * (p1[1] - p0[1]));
+            var angleSky = Math.atan2(p1[1] - p0[1], p1[0] - p0[0]);
             var rot = angleSky - angleModel;
             var cosR = Math.cos(rot), sinR = Math.sin(rot);
             var excludeSet = {};
@@ -1337,8 +1455,10 @@
               var vy = norm[k][1] - norm[model.refEdge[0]][1];
               var vrx = vx * cosR - vy * sinR;
               var vry = vx * sinR + vy * cosR;
-              var exRa = s0[0] + scaleDeg * vrx;
-              var exDec = s0[1] + scaleDeg * vry;
+              var predX = p0[0] + scaleParis * vrx;
+              var predY = p0[1] + scaleParis * vry;
+              var predRaDec = parisViewToRaDec(predX, predY);
+              var exRa = predRaDec[0], exDec = predRaDec[1];
               var near = gridNearest(grid, starList, exRa, exDec, excludeSet, MATCH_TOLERANCE_DEG);
               if (!near) { ok = false; break; }
               excludeSet[near.index] = true;
@@ -1351,7 +1471,7 @@
                 errors.forEach(function(e) { rms += e * e; });
                 rms = Math.sqrt(rms / errors.length);
               }
-              candidates.push({ starIndices: matched, rms: rms, ratio: scaleDeg / model.L_ref });
+              candidates.push({ starIndices: matched, rms: rms, ratio: scaleParis / model.L_ref });
             }
           }
           done = batchEnd;
@@ -1373,16 +1493,62 @@
         }
 
         function finishSearch() {
-          candidates.sort(function(a, b) { return a.rms - b.rms; });
+          var algorithm = document.getElementById("match-algorithm").value;
+          var refCoords = stars.map(function(s) { return [s[0], s[1]]; });
+          var validLinks = links.filter(function(edge) {
+            var i = edge[0], j = edge[1];
+            return i >= 0 && i < stars.length && j >= 0 && j < stars.length && i !== j;
+          });
+          if (algorithm === "rms-angles") {
+            candidates.forEach(function(cand) {
+              var candCoords = cand.starIndices.map(function(i) { return starList[i].coords.slice(); });
+              var angleDiffs = computeAngleDiffAtVertices(refCoords, candCoords, validLinks);
+              var maxAngleDiff = angleDiffs.length ? Math.max.apply(null, angleDiffs) : 0;
+              cand.maxAngleDiff = maxAngleDiff;
+              cand.combinedScore = cand.rms + maxAngleDiff / 100;
+            });
+            candidates.sort(function(a, b) { return a.combinedScore - b.combinedScore; });
+          } else if (algorithm === "ratios-angles") {
+            var refParisView = stars.map(function(s) { return raDecToParisView(s[0], s[1]); });
+            var refDesc = buildSegmentDescriptors(validLinks, refParisView, true);
+            if (refDesc.ratios.length) {
+              candidates.forEach(function(cand) {
+                var candParisView = cand.starIndices.map(function(i) { return starList[i].parisView.slice(); });
+                var candDesc = buildSegmentDescriptors(validLinks, candParisView, true);
+                var sumR2 = 0, sumA2 = 0;
+                var n = Math.min(refDesc.ratios.length, candDesc.ratios.length);
+                for (var i = 0; i < n; i++) {
+                  sumR2 += (refDesc.ratios[i] - candDesc.ratios[i]) * (refDesc.ratios[i] - candDesc.ratios[i]);
+                  var ad = angleDiffNorm(refDesc.angles[i], candDesc.angles[i]);
+                  sumA2 += ad * ad;
+                }
+                cand.rmsRatios = n ? Math.sqrt(sumR2 / n) : 0;
+                cand.rmsAngles = n ? Math.sqrt(sumA2 / n) : 0;
+                cand.combinedScore = cand.rmsRatios + LAMBDA_RATIOS_ANGLES * cand.rmsAngles;
+              });
+              candidates.sort(function(a, b) { return a.combinedScore - b.combinedScore; });
+            } else {
+              candidates.sort(function(a, b) { return a.rms - b.rms; });
+            }
+          } else {
+            candidates.sort(function(a, b) { return a.rms - b.rms; });
+          }
           var top = candidates.slice(0, TOP_K);
           btn.disabled = false;
           if (top.length === 0) {
             resultsDiv.innerHTML = "<p style='color:#94a3b8; font-size:12px;'>Aucune correspondance trouvée. Essayez d'ajuster la forme ou la tolérance.</p>";
             return;
           }
-          var html = "<p class='match-legend' style='font-size:11px; color:#94a3b8; margin-bottom:8px;'>RMS (écartement angulaire par rapport à la forme)</p>";
+          var legendText = algorithm === "rms-angles"
+            ? "Score = RMS + pénalité angles (forme des sommets)"
+            : (algorithm === "ratios-angles"
+              ? "Score = RMS ratios + λ×RMS angles (forme par segments)"
+              : "RMS (écartement angulaire par rapport à la forme)");
+          var html = "<p class='match-legend' style='font-size:11px; color:#94a3b8; margin-bottom:8px;'>" + legendText + "</p>";
           top.forEach(function(cand, idx) {
             var scoreText = "RMS " + (cand.rms * 60).toFixed(2) + "′";
+            if (cand.maxAngleDiff != null) scoreText += " — angle max " + cand.maxAngleDiff.toFixed(1) + "°";
+            if (cand.rmsRatios != null && cand.rmsAngles != null) scoreText += " — ratios " + cand.rmsRatios.toFixed(3) + " / angles " + cand.rmsAngles.toFixed(1) + "°";
             var ratioText = cand.ratio != null ? "Taille : × " + cand.ratio.toFixed(2) : "";
             var coordsForVisibility = cand.starIndices.map(function(i) { return starList[i].coords; });
             var vis = visibilityFromParis(coordsForVisibility);

@@ -293,17 +293,32 @@ setTimeout(function() {
           var centerY_img = projectedCenter[1];
 
           var extent = null;
-          function computeExtentFromCoords(coords) {
-            var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+          function getPointsFromCoords(coords) {
+            if (!coords || coords.length === 0) return [];
+            var first = coords[0];
+            if (Array.isArray(first) && first.length >= 2 && typeof first[0] === "number") {
+              return coords;
+            }
+            var out = [];
             for (var si = 0; si < coords.length; si++) {
-              for (var pj = 0; pj < coords[si].length; pj++) {
-                var pt = Celestial.mapProjection(coords[si][pj]);
-                if (pt && !isNaN(pt[0]) && !isNaN(pt[1])) {
-                  if (pt[0] < minX) minX = pt[0];
-                  if (pt[1] < minY) minY = pt[1];
-                  if (pt[0] > maxX) maxX = pt[0];
-                  if (pt[1] > maxY) maxY = pt[1];
-                }
+              var seg = coords[si];
+              if (!Array.isArray(seg)) continue;
+              for (var pj = 0; pj < seg.length; pj++) {
+                if (Array.isArray(seg[pj]) && seg[pj].length >= 2) out.push(seg[pj]);
+              }
+            }
+            return out;
+          }
+          function computeExtentFromCoords(coords) {
+            var points = getPointsFromCoords(coords);
+            var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            for (var i = 0; i < points.length; i++) {
+              var pt = Celestial.mapProjection(points[i]);
+              if (pt && !isNaN(pt[0]) && !isNaN(pt[1])) {
+                if (pt[0] < minX) minX = pt[0];
+                if (pt[1] < minY) minY = pt[1];
+                if (pt[0] > maxX) maxX = pt[0];
+                if (pt[1] > maxY) maxY = pt[1];
               }
             }
             if (minX === Infinity) return null;
@@ -329,14 +344,27 @@ setTimeout(function() {
             var extentMax = Math.max(extent.width, extent.height);
             imageSize = savedScale != null && typeof savedScale === "number" ? extentMax * savedScale : extentMax;
           } else {
-            imageSize = defaultScale;
+            var projScale = (Celestial.mapProjection && typeof Celestial.mapProjection.scale === "function") ? Celestial.mapProjection.scale() : 400;
+            var scaleRef = 400;
+            imageSize = defaultScale * Math.max(0.3, Math.min(3, projScale / scaleRef));
+          }
+
+          var localNorthAngle = -Math.PI / 2;
+          var decStep = centerCoords[1] < 89.5 ? 0.5 : -0.5;
+          var northProbe = Celestial.mapProjection([centerCoords[0], centerCoords[1] + decStep]);
+          if (northProbe && !isNaN(northProbe[0]) && !isNaN(northProbe[1])) {
+            var ndx = northProbe[0] - centerX_img, ndy = northProbe[1] - centerY_img;
+            if (ndx !== 0 || ndy !== 0) {
+              localNorthAngle = Math.atan2(ndy, ndx);
+              if (decStep < 0) localNorthAngle += Math.PI;
+            }
           }
 
           var orient = mergedOrientation && mergedOrientation[constId];
-          var angleRad = 0;
+          var angleRad = localNorthAngle + Math.PI / 2;
           if (orient !== undefined && orient !== null) {
             if (typeof orient === "number") {
-              angleRad = -orient * Math.PI / 180;
+              angleRad = localNorthAngle + Math.PI / 2 - orient * Math.PI / 180;
             } else if (Array.isArray(orient) && orient.length >= 2) {
               var projHead = Celestial.mapProjection(orient);
               if (projHead && !isNaN(projHead[0])) {
