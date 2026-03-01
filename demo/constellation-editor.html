@@ -143,6 +143,41 @@
     #constellation-overlay .preview-legend {
       pointer-events: none;
     }
+    #zoom-controls {
+      position: absolute;
+      bottom: 12px;
+      right: 12px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(21,21,32,0.9);
+      border: 1px solid #2a2a3a;
+      border-radius: 6px;
+      padding: 4px 8px;
+      z-index: 10;
+    }
+    #zoom-controls button {
+      width: 28px;
+      height: 28px;
+      border: 1px solid #3a3a4a;
+      border-radius: 4px;
+      background: #1a1a24;
+      color: #e0e0e0;
+      font-size: 16px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+    }
+    #zoom-controls button:hover { background: #2a2a3a; }
+    #zoom-level-display {
+      color: #94a3b8;
+      font-size: 12px;
+      min-width: 48px;
+      text-align: center;
+      font-variant-numeric: tabular-nums;
+    }
     .links {
       text-align: center;
       margin-top: 16px;
@@ -289,6 +324,11 @@
   <div id="celestial-map-wrapper">
     <div id="celestial-map"></div>
     <svg id="constellation-overlay" aria-hidden="true"></svg>
+    <div id="zoom-controls">
+      <button type="button" id="btn-zoom-out" title="Zoom −">−</button>
+      <span id="zoom-level-display">×6.6</span>
+      <button type="button" id="btn-zoom-in" title="Zoom +">+</button>
+    </div>
   </div>
 
   <div id="saved-constellations-section">
@@ -327,6 +367,8 @@
 
   var STORAGE_KEY = "customConstellations";
   var REFERENCE_CONST = "UMi"; // Petite Ourse
+  var INITIAL_ZOOM = 6.6;
+  var ZOOM_STEP = 1.3;
 
   // État de l'éditeur : nom + points [lon, lat] + arêtes [indexA, indexB] + image de fond
   var editorState = {
@@ -450,6 +492,31 @@
 
   Celestial.display(config);
 
+  var editorZoom = INITIAL_ZOOM;
+
+  function updateZoomDisplay() {
+    var el = document.getElementById("zoom-level-display");
+    if (!el) return;
+    el.textContent = "×" + editorZoom.toFixed(1);
+  }
+
+  function setZoomAbsolute(targetZoom) {
+    targetZoom = Math.max(0.3, Math.min(20, targetZoom));
+    var factor = targetZoom / editorZoom;
+    if (Math.abs(factor - 1) < 0.001) return;
+    Celestial.zoomBy(factor);
+    editorZoom = targetZoom;
+    updateZoomDisplay();
+  }
+
+  document.getElementById("btn-zoom-in").addEventListener("click", function() {
+    setZoomAbsolute(editorZoom * ZOOM_STEP);
+  });
+
+  document.getElementById("btn-zoom-out").addEventListener("click", function() {
+    setZoomAbsolute(editorZoom / ZOOM_STEP);
+  });
+
   setTimeout(function() {
     // Retirer du DOM toutes les constellations sauf Petite Ourse (une fois qu'elles sont chargées)
     var filterConstellationsRedrawDone = false;
@@ -487,18 +554,27 @@
         context.save();
         if (editorBackgroundImage && editorBackgroundImage.complete && editorBackgroundImage.naturalWidth > 0) {
           context.globalAlpha = 0.5;
-          var size = Math.min(metrics.width, metrics.height) * 0.5;
           var imgCenterX = centerX;
           var imgCenterY = centerY;
           var angleRad = 0;
+          var size = Math.min(metrics.width, metrics.height) * 0.5;
           if (editorState.stars && editorState.stars.length >= 2 && typeof Celestial.mapProjection === "function") {
             var sumX = 0, sumY = 0;
+            var pMinX = Infinity, pMinY = Infinity, pMaxX = -Infinity, pMaxY = -Infinity;
             editorState.stars.forEach(function(p) {
               var pt = Celestial.mapProjection(p);
-              if (pt && !isNaN(pt[0])) { sumX += pt[0]; sumY += pt[1]; }
+              if (pt && !isNaN(pt[0])) {
+                sumX += pt[0]; sumY += pt[1];
+                if (pt[0] < pMinX) pMinX = pt[0];
+                if (pt[1] < pMinY) pMinY = pt[1];
+                if (pt[0] > pMaxX) pMaxX = pt[0];
+                if (pt[1] > pMaxY) pMaxY = pt[1];
+              }
             });
             imgCenterX = sumX / editorState.stars.length;
             imgCenterY = sumY / editorState.stars.length;
+            var starExtent = Math.max(pMaxX - pMinX, pMaxY - pMinY);
+            if (starExtent > 10) size = starExtent * 1.5;
             if (editorState.orientation != null) {
               if (typeof editorState.orientation === "number") {
                 angleRad = -editorState.orientation * Math.PI / 180;
@@ -1575,14 +1651,17 @@
           });
           resultsDiv.innerHTML = html;
           resultsDiv._topCandidates = top.map(function(c) {
-            return c.starIndices.map(function(idx) { return starList[idx].coords.slice(); });
+            return {
+              coords: c.starIndices.map(function(idx) { return starList[idx].coords.slice(); }),
+              ratio: c.ratio
+            };
           });
           resultsDiv.querySelectorAll("button[data-preview-index]").forEach(function(bt) {
             bt.addEventListener("click", function() {
               var idx = parseInt(bt.getAttribute("data-preview-index"), 10);
-              var coords = resultsDiv._topCandidates[idx];
-              if (coords && coords.length === editorState.stars.length) {
-                previewCandidateCoords = coords.map(function(c) { return c.slice(); });
+              var cand = resultsDiv._topCandidates[idx];
+              if (cand && cand.coords.length === editorState.stars.length) {
+                previewCandidateCoords = cand.coords.map(function(c) { return c.slice(); });
                 if (typeof Celestial !== "undefined" && Celestial.redraw) Celestial.redraw();
               }
             });
@@ -1590,11 +1669,37 @@
           resultsDiv.querySelectorAll("button[data-result-index]").forEach(function(bt) {
             bt.addEventListener("click", function() {
               var idx = parseInt(bt.getAttribute("data-result-index"), 10);
-              var coords = resultsDiv._topCandidates[idx];
-              if (coords && coords.length === editorState.stars.length) {
+              var cand = resultsDiv._topCandidates[idx];
+              if (cand && cand.coords.length === editorState.stars.length && editorState.links.length > 0) {
                 previewCandidateCoords = null;
-                editorState.stars = coords.map(function(c) { return c.slice(); });
-                if (typeof Celestial !== "undefined" && Celestial.redraw) Celestial.redraw();
+
+                var i0 = editorState.links[0][0], i1 = editorState.links[0][1];
+                var oldP0 = Celestial.mapProjection(editorState.stars[i0]);
+                var oldP1 = Celestial.mapProjection(editorState.stars[i1]);
+                var oldAngle = Math.atan2(oldP1[1] - oldP0[1], oldP1[0] - oldP0[0]);
+
+                editorState.stars = cand.coords.map(function(c) { return c.slice(); });
+
+                var sumLon = 0, sumLat = 0;
+                cand.coords.forEach(function(c) { sumLon += c[0]; sumLat += c[1]; });
+                var cLon = sumLon / cand.coords.length;
+                var cLat = sumLat / cand.coords.length;
+                var targetZoom = INITIAL_ZOOM / Math.max(cand.ratio || 1, 0.1);
+                Celestial.rotate({center: [cLon, cLat, 0]});
+                setZoomAbsolute(targetZoom);
+
+                var newP0 = Celestial.mapProjection(editorState.stars[i0]);
+                var newP1 = Celestial.mapProjection(editorState.stars[i1]);
+                var newAngle = Math.atan2(newP1[1] - newP0[1], newP1[0] - newP0[0]);
+                var rotDiffDeg = (newAngle - oldAngle) * 180 / Math.PI;
+                editorState.orientation = ((editorState.orientation || 0) - rotDiffDeg);
+                while (editorState.orientation > 180) editorState.orientation -= 360;
+                while (editorState.orientation < -180) editorState.orientation += 360;
+                editorState.orientation = Math.round(editorState.orientation);
+                var orientEl = document.getElementById("icon-orientation");
+                if (orientEl) orientEl.value = editorState.orientation;
+
+                Celestial.redraw();
               }
             });
           });

@@ -48,6 +48,9 @@
         padding: 12px;
       }
     }
+    #celestial-form {
+      display: none !important;
+    }
   </style>
 </head>
 <body>
@@ -88,6 +91,20 @@
           <label style="display:flex; align-items:center; gap:8px; margin-bottom:6px;"><input type="checkbox" id="aspect-line-ecliptic" checked /> Écliptique</label>
           <label style="display:flex; align-items:center; gap:8px; font-size:13px;">Épaisseur <input type="range" id="aspect-universe-width" min="0.2" max="3" step="0.1" style="flex:1;" /><span id="aspect-universe-width-val">0.8</span></label>
           <label style="display:flex; align-items:center; gap:8px; font-size:13px;">Opacité <input type="range" id="aspect-universe-opacity" min="0.2" max="1" step="0.05" style="flex:1;" /><span id="aspect-universe-opacity-val">0.75</span></label>
+        </fieldset>
+        <fieldset style="border:1px solid #444; border-radius:6px; padding:10px;">
+          <legend style="color:#aaa;">Constellations stockées (custom)</legend>
+          <label style="display:flex; align-items:center; gap:8px; margin-bottom:6px;"><input type="checkbox" id="aspect-custom-const-show" checked /> Afficher</label>
+          <label style="display:flex; align-items:center; gap:8px; font-size:13px; margin-bottom:6px;">Couleur lignes <input type="color" id="aspect-custom-const-color" value="#a78bfa" /></label>
+          <label style="display:flex; align-items:center; gap:8px; font-size:13px;">Épaisseur <input type="range" id="aspect-custom-const-width" min="0.5" max="8" step="0.25" style="flex:1;" /><span id="aspect-custom-const-width-val">2.5</span></label>
+          <label style="display:flex; align-items:center; gap:8px; font-size:13px;">Opacité <input type="range" id="aspect-custom-const-opacity" min="0.1" max="1" step="0.05" style="flex:1;" /><span id="aspect-custom-const-opacity-val">0.9</span></label>
+          <label style="display:flex; align-items:center; gap:8px; font-size:13px; margin-top:6px;">Couleur noms <input type="color" id="aspect-custom-const-label-color" value="#c4b5fd" /></label>
+        </fieldset>
+        <fieldset style="border:1px solid #444; border-radius:6px; padding:10px;">
+          <legend style="color:#aaa;">Voie lactée</legend>
+          <label style="display:flex; align-items:center; gap:8px; margin-bottom:6px;"><input type="checkbox" id="aspect-mw-show" checked /> Afficher</label>
+          <label style="display:flex; align-items:center; gap:8px; font-size:13px; margin-bottom:6px;">Couleur <input type="color" id="aspect-mw-color" value="#ffffff" /></label>
+          <label style="display:flex; align-items:center; gap:8px; font-size:13px;">Opacité <input type="range" id="aspect-mw-opacity" min="0.01" max="1" step="0.01" style="flex:1;" /><span id="aspect-mw-opacity-val">0.15</span></label>
         </fieldset>
       </div>
     </div>
@@ -170,7 +187,15 @@ var config = {
 };
 
 var CUSTOM_STORAGE_KEY = "customConstellations";
+var ASPECT_STORAGE_KEY = "celestialAspectSettingsV1";
 var customConstList = [];
+var customConstellationStyle = {
+  show: true,
+  stroke: "#a78bfa",
+  width: 2.5,
+  opacity: 0.9,
+  labelColor: "#c4b5fd"
+};
 var DISPLAY_PRESETS = {
   desktop: {
     starsSize: 7,
@@ -219,6 +244,96 @@ function applyResponsiveVisualDefaults(force) {
 
 function getCustomConstellationLabelFont() {
   return isMobileViewport() ? "bold 10px Helvetica, Arial, sans-serif" : "bold 12px Helvetica, Arial, sans-serif";
+}
+
+function buildAspectSettingsSnapshot() {
+  return {
+    constellations: {
+      lines: !!config.constellations.lines,
+      lineWidth: config.constellations.linestyle.width,
+      lineOpacity: config.constellations.linestyle.opacity
+    },
+    stars: {
+      show: !!config.stars.show,
+      size: config.stars.size,
+      exponent: config.stars.exponent
+    },
+    lines: {
+      graticuleShow: !!config.lines.graticule.show,
+      equatorialShow: !!config.lines.equatorial.show,
+      eclipticShow: !!config.lines.ecliptic.show,
+      width: config.lines.graticule.width,
+      opacity: config.lines.graticule.opacity
+    },
+    customConstellations: {
+      show: !!customConstellationStyle.show,
+      stroke: customConstellationStyle.stroke,
+      width: customConstellationStyle.width,
+      opacity: customConstellationStyle.opacity,
+      labelColor: customConstellationStyle.labelColor
+    },
+    milkyWay: {
+      show: !!config.mw.show,
+      fill: config.mw.style.fill,
+      opacity: config.mw.style.opacity
+    }
+  };
+}
+
+function applyAspectSettingsSnapshot(saved) {
+  if (!saved || typeof saved !== "object") return;
+  if (saved.constellations) {
+    if (typeof saved.constellations.lines === "boolean") config.constellations.lines = saved.constellations.lines;
+    if (typeof saved.constellations.lineWidth === "number") config.constellations.linestyle.width = saved.constellations.lineWidth;
+    if (typeof saved.constellations.lineOpacity === "number") config.constellations.linestyle.opacity = saved.constellations.lineOpacity;
+  }
+  if (saved.stars) {
+    if (typeof saved.stars.show === "boolean") config.stars.show = saved.stars.show;
+    if (typeof saved.stars.size === "number") config.stars.size = saved.stars.size;
+    if (typeof saved.stars.exponent === "number") config.stars.exponent = saved.stars.exponent;
+  }
+  if (saved.lines) {
+    if (typeof saved.lines.graticuleShow === "boolean") config.lines.graticule.show = saved.lines.graticuleShow;
+    if (typeof saved.lines.equatorialShow === "boolean") config.lines.equatorial.show = saved.lines.equatorialShow;
+    if (typeof saved.lines.eclipticShow === "boolean") config.lines.ecliptic.show = saved.lines.eclipticShow;
+    if (typeof saved.lines.width === "number") {
+      config.lines.graticule.width = saved.lines.width;
+      config.lines.equatorial.width = saved.lines.width;
+      config.lines.ecliptic.width = saved.lines.width;
+    }
+    if (typeof saved.lines.opacity === "number") {
+      config.lines.graticule.opacity = saved.lines.opacity;
+      config.lines.equatorial.opacity = saved.lines.opacity;
+      config.lines.ecliptic.opacity = saved.lines.opacity;
+    }
+  }
+  if (saved.customConstellations) {
+    if (typeof saved.customConstellations.show === "boolean") customConstellationStyle.show = saved.customConstellations.show;
+    if (typeof saved.customConstellations.stroke === "string") customConstellationStyle.stroke = saved.customConstellations.stroke;
+    if (typeof saved.customConstellations.width === "number") customConstellationStyle.width = saved.customConstellations.width;
+    if (typeof saved.customConstellations.opacity === "number") customConstellationStyle.opacity = saved.customConstellations.opacity;
+    if (typeof saved.customConstellations.labelColor === "string") customConstellationStyle.labelColor = saved.customConstellations.labelColor;
+  }
+  if (saved.milkyWay) {
+    if (typeof saved.milkyWay.show === "boolean") config.mw.show = saved.milkyWay.show;
+    if (typeof saved.milkyWay.fill === "string") config.mw.style.fill = saved.milkyWay.fill;
+    if (typeof saved.milkyWay.opacity === "number") config.mw.style.opacity = saved.milkyWay.opacity;
+  }
+}
+
+function loadAspectSettings() {
+  try {
+    var raw = localStorage.getItem(ASPECT_STORAGE_KEY);
+    if (!raw) return;
+    var saved = JSON.parse(raw);
+    applyAspectSettingsSnapshot(saved);
+  } catch (e) {}
+}
+
+function saveAspectSettings() {
+  try {
+    localStorage.setItem(ASPECT_STORAGE_KEY, JSON.stringify(buildAspectSettingsSnapshot()));
+  } catch (e) {}
 }
 
 function getCustomConstellations() {
@@ -276,12 +391,20 @@ function applyDisplayConfig() {
     sc = Celestial.mapProjection.scale();
   }
   Celestial.display(config);
+  hideBuiltInCelestialForm();
   if (Celestial.mapProjection && rot != null) {
     Celestial.mapProjection.rotate(rot);
     Celestial.mapProjection.scale(sc);
   }
   Celestial.redraw();
   fixZoomNoRotation();
+}
+
+function hideBuiltInCelestialForm() {
+  var forms = document.querySelectorAll("#celestial-form");
+  for (var i = 0; i < forms.length; i++) {
+    forms[i].style.setProperty("display", "none", "important");
+  }
 }
 
 function fixZoomNoRotation() {
@@ -298,7 +421,9 @@ function fixZoomNoRotation() {
 }
 
 applyResponsiveVisualDefaults(true);
+loadAspectSettings();
 Celestial.display(config);
+hideBuiltInCelestialForm();
 
 var mobileViewportQuery = window.matchMedia("(max-width: 640px)");
 function onViewportPresetChange() {
@@ -482,7 +607,13 @@ setTimeout(function() {
       addCustomConstellationsToMap();
     },
     redraw: function() {
-      var lineStyle = { stroke: "#a78bfa", fill: "none", width: config.constellations.linestyle.width, opacity: 0.9 };
+      var lineStyle = {
+        stroke: customConstellationStyle.stroke,
+        fill: "none",
+        width: customConstellationStyle.width,
+        opacity: customConstellationStyle.opacity
+      };
+      if (!customConstellationStyle.show) return;
       Celestial.container.selectAll(".custom-const").each(function(d) {
         if (!d || !d.geometry || !d.geometry.coordinates) return;
         Celestial.setStyle(lineStyle);
@@ -491,7 +622,7 @@ setTimeout(function() {
         if (d.properties && d.properties.loc && typeof Celestial.clip === "function" && Celestial.clip(d.properties.loc)) {
           var pt = Celestial.mapProjection(d.properties.loc);
           if (pt && !isNaN(pt[0])) {
-            Celestial.setTextStyle({ fill: "#c4b5fd", font: getCustomConstellationLabelFont(), align: "center", baseline: "middle" });
+            Celestial.setTextStyle({ fill: customConstellationStyle.labelColor, font: getCustomConstellationLabelFont(), align: "center", baseline: "middle" });
             var name = (d.properties.fr || d.properties.n || d.id || "");
             Celestial.context.fillText(name, pt[0], pt[1]);
           }
@@ -661,6 +792,25 @@ setTimeout(function() {
     var o = (l.graticule.opacity + l.equatorial.opacity + l.ecliptic.opacity) / 3;
     if (uw) { uw.value = w; document.getElementById("aspect-universe-width-val").textContent = Number(w).toFixed(1); }
     if (uo) { uo.value = o; document.getElementById("aspect-universe-opacity-val").textContent = Number(o).toFixed(2); }
+    var cshow = document.getElementById("aspect-custom-const-show");
+    var ccol = document.getElementById("aspect-custom-const-color");
+    var cwid = document.getElementById("aspect-custom-const-width");
+    var copa = document.getElementById("aspect-custom-const-opacity");
+    var clab = document.getElementById("aspect-custom-const-label-color");
+    if (cshow) cshow.checked = customConstellationStyle.show;
+    if (ccol) ccol.value = customConstellationStyle.stroke;
+    if (cwid) { cwid.value = customConstellationStyle.width; document.getElementById("aspect-custom-const-width-val").textContent = customConstellationStyle.width; }
+    if (copa) { copa.value = customConstellationStyle.opacity; document.getElementById("aspect-custom-const-opacity-val").textContent = customConstellationStyle.opacity; }
+    if (clab) clab.value = customConstellationStyle.labelColor;
+    var mwShow = document.getElementById("aspect-mw-show");
+    var mwColor = document.getElementById("aspect-mw-color");
+    var mwOpacity = document.getElementById("aspect-mw-opacity");
+    if (mwShow) mwShow.checked = !!config.mw.show;
+    if (mwColor) mwColor.value = config.mw.style.fill || "#ffffff";
+    if (mwOpacity) {
+      mwOpacity.value = parseFloat(config.mw.style.opacity);
+      document.getElementById("aspect-mw-opacity-val").textContent = Number(config.mw.style.opacity).toFixed(2);
+    }
   }
   function toConfigAndRedraw() {
     var c = config.constellations, s = config.stars, l = config.lines;
@@ -683,6 +833,32 @@ setTimeout(function() {
     if (uo) document.getElementById("aspect-universe-opacity-val").textContent = uo.value;
     l.graticule.width = l.equatorial.width = l.ecliptic.width = w;
     l.graticule.opacity = l.equatorial.opacity = l.ecliptic.opacity = o;
+    var cshow = document.getElementById("aspect-custom-const-show");
+    var ccol = document.getElementById("aspect-custom-const-color");
+    var cwid = document.getElementById("aspect-custom-const-width");
+    var copa = document.getElementById("aspect-custom-const-opacity");
+    var clab = document.getElementById("aspect-custom-const-label-color");
+    if (cshow) customConstellationStyle.show = cshow.checked;
+    if (ccol) customConstellationStyle.stroke = ccol.value;
+    if (cwid) {
+      customConstellationStyle.width = parseFloat(cwid.value);
+      document.getElementById("aspect-custom-const-width-val").textContent = cwid.value;
+    }
+    if (copa) {
+      customConstellationStyle.opacity = parseFloat(copa.value);
+      document.getElementById("aspect-custom-const-opacity-val").textContent = copa.value;
+    }
+    if (clab) customConstellationStyle.labelColor = clab.value;
+    var mwShow = document.getElementById("aspect-mw-show");
+    var mwColor = document.getElementById("aspect-mw-color");
+    var mwOpacity = document.getElementById("aspect-mw-opacity");
+    if (mwShow) config.mw.show = mwShow.checked;
+    if (mwColor) config.mw.style.fill = mwColor.value;
+    if (mwOpacity) {
+      config.mw.style.opacity = parseFloat(mwOpacity.value);
+      document.getElementById("aspect-mw-opacity-val").textContent = mwOpacity.value;
+    }
+    saveAspectSettings();
     if (typeof Celestial !== "undefined" && Celestial.display) applyDisplayConfig();
   }
   window.syncAspectPanelFromConfig = fromConfig;
@@ -690,7 +866,9 @@ setTimeout(function() {
   ["aspect-const-lines-show", "aspect-const-width", "aspect-const-opacity",
    "aspect-stars-show", "aspect-stars-size", "aspect-stars-exponent",
    "aspect-line-graticule", "aspect-line-equatorial", "aspect-line-ecliptic",
-   "aspect-universe-width", "aspect-universe-opacity"].forEach(function(id) {
+   "aspect-universe-width", "aspect-universe-opacity",
+   "aspect-custom-const-show", "aspect-custom-const-color", "aspect-custom-const-width", "aspect-custom-const-opacity", "aspect-custom-const-label-color",
+   "aspect-mw-show", "aspect-mw-color", "aspect-mw-opacity"].forEach(function(id) {
     var el = document.getElementById(id);
     if (!el) return;
     el.addEventListener("input", toConfigAndRedraw);
