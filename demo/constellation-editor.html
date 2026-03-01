@@ -946,9 +946,20 @@
       if (typeof Celestial !== "undefined" && typeof Celestial.mapProjection === "function" && typeof Celestial.metrics === "function") {
         var m = Celestial.metrics();
         var pad = 15;
+        var projScale = (typeof Celestial.mapProjection.scale === "function") ? Celestial.mapProjection.scale() : 1000;
+        var localProj = null;
+        try {
+          if (typeof d3 !== "undefined" && d3.geo && d3.geo.stereographic) {
+            localProj = d3.geo.stereographic()
+              .rotate([-centerLon, -centerLat, 0])
+              .scale(projScale)
+              .translate([0, 0]);
+          }
+        } catch (e) {}
+        if (!localProj) localProj = Celestial.mapProjection;
         var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
         stars.forEach(function(p) {
-          var pt = Celestial.mapProjection(p);
+          var pt = localProj(p);
           if (pt && !isNaN(pt[0])) {
             if (pt[0] < minX) minX = pt[0];
             if (pt[1] < minY) minY = pt[1];
