@@ -2,6 +2,7 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>D3-Celestial - Éditeur v2 (WYSIWYG)</title>
   <script type="text/javascript" src="../lib/d3.min.js"></script>
   <script type="text/javascript" src="../lib/d3.geo.projection.min.js"></script>
@@ -24,26 +25,30 @@
       align-items: center;
       background: #111119;
       border-bottom: 2px solid #1e1e2e;
-      padding: 0 16px;
+      padding: 0 8px;
       position: sticky;
       top: 0;
       z-index: 100;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      white-space: nowrap;
     }
     .tab-btn {
-      padding: 12px 24px;
+      padding: 10px 16px;
       border: none;
       background: transparent;
       color: #888;
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 600;
       cursor: pointer;
       border-bottom: 3px solid transparent;
       transition: all 0.15s;
+      flex-shrink: 0;
     }
     .tab-btn:hover { color: #ccc; }
     .tab-btn.active { color: #60a5fa; border-bottom-color: #3b82f6; }
-    .tab-sep { flex: 1; }
-    .nav-link { color: #60a5fa; text-decoration: none; font-size: 13px; padding: 8px 12px; }
+    .tab-sep { flex: 1; min-width: 8px; }
+    .nav-link { color: #60a5fa; text-decoration: none; font-size: 12px; padding: 6px 8px; flex-shrink: 0; }
     .nav-link:hover { text-decoration: underline; }
 
     .tab-panel { display: none; }
@@ -70,7 +75,7 @@
     #draw-layout {
       display: flex; gap: 16px; align-items: flex-start;
     }
-    #draw-left { flex: 0 1 auto; min-width: 0; }
+    #draw-left { flex: 1 1 auto; min-width: 0; }
     #draw-left h2 { margin: 0 0 6px 0; font-size: 17px; font-weight: 600; }
     .info-line { color: #888; font-size: 12px; margin-bottom: 10px; line-height: 1.5; }
 
@@ -95,7 +100,11 @@
       gap: 6px; max-height: 160px; overflow-y: auto;
     }
 
-    #draw-map-wrapper { position: relative; display: inline-block; }
+    #draw-map-wrapper {
+      position: relative; display: inline-block;
+      max-width: 100%;
+    }
+    #draw-map-wrapper canvas { max-width: 100%; height: auto; }
     #draw-overlay {
       position: absolute; left: 0; top: 0; pointer-events: all;
     }
@@ -162,9 +171,19 @@
     /* === SCREEN 2 : SKY === */
     #screen-sky { padding: 0; }
     #sky-layout { display: flex; height: calc(100vh - 48px); }
-    #sky-map-col { flex: 1; position: relative; overflow: hidden; background: #000; }
+    #sky-map-col {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      background: #000;
+      min-width: 0;
+    }
     #sky-map-col canvas { max-width: 100%; height: auto; display: block; margin: 0 auto; }
-    #sky-celestial-map { width: 100%; display: block; }
+    #sky-celestial-map {
+      width: 100%;
+      display: block;
+      overflow: hidden;
+    }
 
     #sky-sidebar {
       flex: 0 0 320px; background: #111119; border-left: 1px solid #1e1e2e;
@@ -201,6 +220,71 @@
     .swatch { width: 18px; height: 3px; border-radius: 2px; }
 
     #celestial-form { display: none !important; }
+
+    /* === RESPONSIVE MOBILE === */
+    @media (max-width: 768px) {
+      #tab-bar {
+        padding: 0 4px;
+        gap: 0;
+      }
+      .tab-btn {
+        padding: 8px 10px;
+        font-size: 12px;
+      }
+      .nav-link {
+        font-size: 11px;
+        padding: 4px 6px;
+      }
+
+      #screen-draw { padding: 10px; }
+      #draw-layout {
+        flex-direction: column;
+      }
+      #draw-left { width: 100%; }
+      #draw-left h2 { font-size: 15px; }
+      .info-line { font-size: 11px; }
+      #editor-toolbar { gap: 6px; padding: 8px; }
+      #editor-toolbar input[type="text"] { width: 120px; }
+
+      #draw-map-wrapper {
+        width: 100%;
+      }
+
+      #search-panel {
+        flex: none;
+        width: 100%;
+        max-height: none;
+        position: static;
+      }
+
+      /* Sky screen: stack vertically */
+      #sky-layout {
+        flex-direction: column;
+        height: auto;
+        min-height: calc(100vh - 48px);
+      }
+      #sky-map-col {
+        width: 100%;
+        flex: none;
+        min-height: 0;
+      }
+      #sky-celestial-map {
+        width: 100%;
+      }
+      #sky-sidebar {
+        flex: none;
+        width: 100%;
+        border-left: none;
+        border-top: 1px solid #1e1e2e;
+        max-height: none;
+        padding: 12px;
+      }
+      #sky-legend {
+        top: 6px; left: 6px;
+        padding: 5px 8px;
+        font-size: 10px;
+      }
+    }
   </style>
 </head>
 <body>
@@ -369,8 +453,10 @@ var editorZoom = INITIAL_ZOOM;
 /* ========================================================================
    DRAW MODE — Celestial config for drawing
    ======================================================================== */
+var isMobile = window.innerWidth <= 768;
+
 var drawConfig = {
-  width: 420,
+  width: isMobile ? Math.min(window.innerWidth - 40, 380) : 420,
   projection: "airy",
   transform: "equatorial",
   background: { fill: "#000000", stroke: "#333", width: 1, opacity: 1 },
@@ -987,6 +1073,7 @@ var skyConfig = {
 var skyHookInstalled = false;
 
 function initSkyMode() {
+  requestAnimationFrame(function() {
   Celestial.display(skyConfig);
 
   setTimeout(function() {
@@ -1023,6 +1110,7 @@ function initSkyMode() {
     Celestial.redraw();
     renderSkySidebar();
   }, 800);
+  });
 }
 
 function fixSkyZoom() {
@@ -1065,53 +1153,60 @@ function loadSkyCustomConstellations() {
 
 function drawMatchesOnSky(ctx) {
   var validLinks = editorState.links.filter(function(e) { return e[0]>=0 && e[0]<editorState.stars.length && e[1]>=0 && e[1]<editorState.stars.length && e[0]!==e[1]; });
-  if (!validLinks.length) return;
+  if (!validLinks.length && !searchResults.length) return;
+
+  var m = Celestial.metrics();
+  var clipCx = m.width / 2, clipCy = m.height / 2;
+  var clipR = Math.min(m.width, m.height) / 2 - 2;
 
   ctx.save();
+  ctx.beginPath();
+  ctx.arc(clipCx, clipCy, clipR, 0, 2 * Math.PI);
+  ctx.clip();
 
   searchResults.forEach(function(r, idx) {
     if (idx === selectedResultIndex) return;
     var pts = r.coords.map(function(c) { return Celestial.mapProjection(c); });
     if (pts.some(function(p) { return !p || isNaN(p[0]); })) return;
-    var alpha = Math.max(0.15, 0.5 - idx * 0.04);
+    var alpha = Math.max(0.25, 0.6 - idx * 0.04);
     ctx.strokeStyle = "rgba(251,191,36," + alpha + ")";
-    ctx.lineWidth = 1.5;
-    ctx.setLineDash([4, 3]);
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5, 3]);
     validLinks.forEach(function(e) { ctx.beginPath(); ctx.moveTo(pts[e[0]][0], pts[e[0]][1]); ctx.lineTo(pts[e[1]][0], pts[e[1]][1]); ctx.stroke(); });
     ctx.setLineDash([]);
     ctx.fillStyle = "rgba(251,191,36," + alpha + ")";
-    pts.forEach(function(p) { ctx.beginPath(); ctx.arc(p[0], p[1], 3, 0, 2 * Math.PI); ctx.fill(); });
-    ctx.fillStyle = "rgba(251,191,36," + Math.min(alpha + 0.2, 0.8) + ")";
-    ctx.font = "bold 9px sans-serif"; ctx.textAlign = "center";
+    pts.forEach(function(p) { ctx.beginPath(); ctx.arc(p[0], p[1], 4, 0, 2 * Math.PI); ctx.fill(); });
+    ctx.fillStyle = "rgba(251,191,36," + Math.min(alpha + 0.2, 0.9) + ")";
+    ctx.font = "bold 10px sans-serif"; ctx.textAlign = "center";
     var cx2 = 0, cy2 = 0; pts.forEach(function(p) { cx2 += p[0]; cy2 += p[1]; }); cx2 /= pts.length; cy2 /= pts.length;
-    ctx.fillText("#" + (idx + 1), cx2, cy2 - 8);
+    ctx.fillText("#" + (idx + 1), cx2, cy2 - 10);
   });
 
   if (selectedResultIndex >= 0 && selectedResultIndex < searchResults.length) {
     var sel = searchResults[selectedResultIndex];
     var pts = sel.coords.map(function(c) { return Celestial.mapProjection(c); });
     if (!pts.some(function(p) { return !p || isNaN(p[0]); })) {
-      ctx.shadowColor = "#22d3ee"; ctx.shadowBlur = 10;
-      ctx.strokeStyle = "#22d3ee"; ctx.lineWidth = 2.5; ctx.setLineDash([]);
+      ctx.shadowColor = "#22d3ee"; ctx.shadowBlur = 12;
+      ctx.strokeStyle = "#22d3ee"; ctx.lineWidth = 3; ctx.setLineDash([]);
       validLinks.forEach(function(e) { ctx.beginPath(); ctx.moveTo(pts[e[0]][0], pts[e[0]][1]); ctx.lineTo(pts[e[1]][0], pts[e[1]][1]); ctx.stroke(); });
       ctx.shadowBlur = 0;
       ctx.fillStyle = "#22d3ee";
-      pts.forEach(function(p) { ctx.beginPath(); ctx.arc(p[0], p[1], 5, 0, 2 * Math.PI); ctx.fill(); });
-      ctx.font = "bold 11px sans-serif"; ctx.textAlign = "center";
+      pts.forEach(function(p) { ctx.beginPath(); ctx.arc(p[0], p[1], 6, 0, 2 * Math.PI); ctx.fill(); });
+      ctx.font = "bold 12px sans-serif"; ctx.textAlign = "center";
       var cx3 = 0, cy3 = 0; pts.forEach(function(p) { cx3 += p[0]; cy3 += p[1]; }); cx3 /= pts.length; cy3 /= pts.length;
-      ctx.fillText("#" + (selectedResultIndex + 1) + " (sélectionnée)", cx3, cy3 - 14);
+      ctx.fillText("#" + (selectedResultIndex + 1) + " (sélectionnée)", cx3, cy3 - 16);
     }
   }
 
   if (editorState.stars.length >= 2) {
     var uPts = editorState.stars.map(function(s) { return Celestial.mapProjection(s); });
     if (!uPts.some(function(p) { return !p || isNaN(p[0]); })) {
-      ctx.globalAlpha = 0.7;
-      ctx.strokeStyle = "#a78bfa"; ctx.lineWidth = 2; ctx.setLineDash([6, 4]);
+      ctx.globalAlpha = 0.8;
+      ctx.strokeStyle = "#a78bfa"; ctx.lineWidth = 2.5; ctx.setLineDash([6, 4]);
       validLinks.forEach(function(e) { ctx.beginPath(); ctx.moveTo(uPts[e[0]][0], uPts[e[0]][1]); ctx.lineTo(uPts[e[1]][0], uPts[e[1]][1]); ctx.stroke(); });
       ctx.setLineDash([]);
       ctx.fillStyle = "#a78bfa";
-      uPts.forEach(function(p) { ctx.beginPath(); ctx.arc(p[0], p[1], 4, 0, 2 * Math.PI); ctx.fill(); });
+      uPts.forEach(function(p) { ctx.beginPath(); ctx.arc(p[0], p[1], 5, 0, 2 * Math.PI); ctx.fill(); });
       ctx.globalAlpha = 1;
     }
   }
