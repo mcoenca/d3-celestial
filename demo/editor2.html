@@ -259,10 +259,23 @@
         </select>
         <button type="button" class="btn accent" id="btn-match-search">Rechercher</button>
       </div>
-      <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;">
-        <label style="font-size:11px;color:#94a3b8;white-space:nowrap;">Top résultats</label>
-        <input type="range" id="top-k-slider" min="10" max="1000" step="10" value="10" style="flex:1;" />
-        <span id="top-k-value" style="font-size:12px;color:#e0e0e0;min-width:32px;text-align:right;font-variant-numeric:tabular-nums;">10</span>
+      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;padding:8px;background:#1a1a24;border-radius:6px;border:1px solid #2a2a3a;">
+        <div style="font-size:11px;font-weight:600;color:#94a3b8;margin-bottom:2px;">Paramètres de recherche</div>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <label style="font-size:11px;color:#94a3b8;white-space:nowrap;min-width:70px;">Top résultats</label>
+          <input type="range" id="top-k-slider" min="10" max="1000" step="10" value="10" style="flex:1;" />
+          <span id="top-k-value" style="font-size:11px;color:#e0e0e0;min-width:32px;text-align:right;font-variant-numeric:tabular-nums;">10</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <label style="font-size:11px;color:#94a3b8;white-space:nowrap;min-width:70px;">Tolérance (°)</label>
+          <input type="range" id="match-tol-slider" min="0.1" max="3" step="0.1" value="0.4" style="flex:1;" />
+          <span id="match-tol-value" style="font-size:11px;color:#e0e0e0;min-width:32px;text-align:right;font-variant-numeric:tabular-nums;">0.4°</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <label style="font-size:11px;color:#94a3b8;white-space:nowrap;min-width:70px;">Étoiles max</label>
+          <input type="range" id="max-stars-slider" min="500" max="5000" step="100" value="2000" style="flex:1;" />
+          <span id="max-stars-value" style="font-size:11px;color:#e0e0e0;min-width:32px;text-align:right;font-variant-numeric:tabular-nums;">2000</span>
+        </div>
       </div>
       <div id="match-progress" class="progress-section" style="display:none;">
         <div>Opérations : <span id="match-ops-done">0</span> / <span id="match-ops-total">0</span></div>
@@ -561,14 +574,17 @@ function getParisDate(){var dt=new Date();dt.setUTCHours(21,0,0,0);return dt;}
 function raDecToParisView(ra,dec){if(typeof Celestial==="undefined"||typeof Celestial.horizontal!=="function")return[ra,dec];var hor=Celestial.horizontal(getParisDate(),[ra,dec],PARIS_GEOPOS);var alt=hor[0]*Math.PI/180,az=hor[1]*Math.PI/180,r=2*Math.tan((Math.PI/2-alt)/2);return[r*Math.cos(az),r*Math.sin(az)];}
 function parisViewToRaDec(x,y){if(typeof Celestial==="undefined"||!Celestial.horizontal||!Celestial.horizontal.inverse)return[x,y];var r=Math.sqrt(x*x+y*y),azDeg=Math.atan2(y,x)*180/Math.PI;if(azDeg<0)azDeg+=360;return Celestial.horizontal.inverse(getParisDate(),[90-2*Math.atan(r/2)*180/Math.PI,azDeg],PARIS_GEOPOS);}
 function visibilityFromParis(coords){if(!coords.length||typeof Celestial==="undefined"||typeof Celestial.horizontal!=="function")return"partiel";var dt=new Date();dt.setUTCHours(21,0,0,0);var above=0;for(var i=0;i<coords.length;i++)if(Celestial.horizontal(dt,coords[i],PARIS_GEOPOS)[0]>0)above++;if(above===coords.length)return"visible";if(above===0)return"invisible";return"partiel";}
-var GRID_STEP=3,MATCH_TOL=0.4,D_MIN=0.5,D_MAX=25,MAX_STARS=2000,BATCH=5000,LAMBDA=0.02;
+var GRID_STEP=3,D_MIN=0.5,D_MAX=25,BATCH=5000,LAMBDA=0.02;
 function getTopK(){var el=document.getElementById("top-k-slider");return el?parseInt(el.value,10):10;}
+function getMatchTol(){var el=document.getElementById("match-tol-slider");return el?parseFloat(el.value):0.4;}
+function getMaxStars(){var el=document.getElementById("max-stars-slider");return el?parseInt(el.value,10):2000;}
 function buildNormalizedModel(){var s=editorState.stars,l=editorState.links;if(s.length<2||l.length<1)return null;var i0=l[0][0],i1=l[0][1];var pv=s.map(function(p){return raDecToParisView(p[0],p[1]);});var cx=0,cy=0;pv.forEach(function(p){cx+=p[0];cy+=p[1];});cx/=pv.length;cy/=pv.length;var dx=pv[i1][0]-pv[i0][0],dy=pv[i1][1]-pv[i0][1],L=Math.sqrt(dx*dx+dy*dy);if(L<1e-6)return null;return{points:pv.map(function(p){return[(p[0]-cx)/L,(p[1]-cy)/L];}),refEdge:[i0,i1],L_ref:L};}
 function buildGrid(sl){var g={};sl.forEach(function(s,i){var k=Math.floor(s.coords[0]/GRID_STEP)+","+Math.floor(s.coords[1]/GRID_STEP);if(!g[k])g[k]=[];g[k].push(i);});return g;}
 function gridNearest(grid,sl,ra,dec,ex,maxD){var ki=Math.floor(ra/GRID_STEP),kj=Math.floor(dec/GRID_STEP),best={index:-1,dist:Infinity};for(var di=-1;di<=1;di++)for(var dj=-1;dj<=1;dj++){var c=grid[(ki+di)+","+(kj+dj)];if(!c)continue;for(var ci=0;ci<c.length;ci++){var idx=c[ci];if(ex[idx])continue;var d=angularDistanceDeg(ra,dec,sl[idx].coords[0],sl[idx].coords[1]);if(d<best.dist)best={index:idx,dist:d};}}return best.dist<=maxD?best:null;}
 
 function runShapeSearch(){var stars=editorState.stars,links=editorState.links;if(stars.length<2||links.length<1){alert("Dessinez 2+ étoiles reliées.");return;}var model=buildNormalizedModel();if(!model){alert("Forme invalide.");return;}var norm=model.points,K=norm.length;var btn=document.getElementById("btn-match-search");var prog=document.getElementById("match-progress");var opsDone=document.getElementById("match-ops-done"),opsTotal=document.getElementById("match-ops-total");var bar=document.getElementById("match-progress-bar");var tEl=document.getElementById("match-time-elapsed"),tRem=document.getElementById("match-time-remaining");var resDiv=document.getElementById("match-results");btn.disabled=true;prog.style.display="block";resDiv.innerHTML="";var t0=Date.now();
-fetch((drawConfig.datapath||"../data/")+"stars.6.json").then(function(r){return r.json();}).then(function(json){var feats=(json.features||[]).filter(function(f){return f.properties&&f.properties.mag<=6&&f.geometry&&f.geometry.coordinates;});feats.sort(function(a,b){return(a.properties.mag||99)-(b.properties.mag||99);});var sl=feats.slice(0,MAX_STARS).map(function(f){var c=f.geometry.coordinates.slice();return{id:f.id,coords:c,parisView:raDecToParisView(c[0],c[1]),mag:f.properties.mag};});var N=sl.length,grid=buildGrid(sl),pairs=[];for(var i=0;i<N;i++)for(var j=i+1;j<N;j++){var d=angularDistanceDeg(sl[i].coords[0],sl[i].coords[1],sl[j].coords[0],sl[j].coords[1]);if(d>=D_MIN&&d<=D_MAX)pairs.push([i,j]);}opsTotal.textContent=pairs.length;var done=0,cands=[];var angM=Math.atan2(norm[model.refEdge[1]][1]-norm[model.refEdge[0]][1],norm[model.refEdge[1]][0]-norm[model.refEdge[0]][0]);
+var matchTol=getMatchTol(),maxStars=getMaxStars();
+fetch((drawConfig.datapath||"../data/")+"stars.6.json").then(function(r){return r.json();}).then(function(json){var feats=(json.features||[]).filter(function(f){return f.properties&&f.properties.mag<=6&&f.geometry&&f.geometry.coordinates;});feats.sort(function(a,b){return(a.properties.mag||99)-(b.properties.mag||99);});var sl=feats.slice(0,maxStars).map(function(f){var c=f.geometry.coordinates.slice();return{id:f.id,coords:c,parisView:raDecToParisView(c[0],c[1]),mag:f.properties.mag};});var N=sl.length,grid=buildGrid(sl),pairs=[];for(var i=0;i<N;i++)for(var j=i+1;j<N;j++){var d=angularDistanceDeg(sl[i].coords[0],sl[i].coords[1],sl[j].coords[0],sl[j].coords[1]);if(d>=D_MIN&&d<=D_MAX)pairs.push([i,j]);}opsTotal.textContent=pairs.length;var done=0,cands=[];var angM=Math.atan2(norm[model.refEdge[1]][1]-norm[model.refEdge[0]][1],norm[model.refEdge[1]][0]-norm[model.refEdge[0]][0]);
 function tryMatch(iA,iB,mirror) {
   var pA=sl[iA].parisView,pB=sl[iB].parisView;
   var sP=Math.sqrt((pB[0]-pA[0])*(pB[0]-pA[0])+(pB[1]-pA[1])*(pB[1]-pA[1]));
@@ -582,7 +598,7 @@ function tryMatch(iA,iB,mirror) {
     var vx=norm[k][0]-norm[model.refEdge[0]][0],vy=norm[k][1]-norm[model.refEdge[0]][1];
     if(mirror) vy=-vy;
     var prd=parisViewToRaDec(pA[0]+sP*(vx*cR-vy*sR),pA[1]+sP*(vx*sR+vy*cR));
-    var near=gridNearest(grid,sl,prd[0],prd[1],ex,MATCH_TOL);
+    var near=gridNearest(grid,sl,prd[0],prd[1],ex,matchTol);
     if(!near){ok=false;break;}ex[near.index]=true;matched[k]=near.index;errors.push(near.dist);
   }
   if(ok&&matched.indexOf(-1)===-1){
@@ -596,6 +612,8 @@ var top=cands.slice(0,getTopK());btn.disabled=false;searchResults=top.map(functi
 batchProc();}).catch(function(err){btn.disabled=false;prog.style.display="none";alert("Erreur: "+(err.message||err));});}
 document.getElementById("btn-match-search").addEventListener("click",runShapeSearch);
 document.getElementById("top-k-slider").addEventListener("input",function(){document.getElementById("top-k-value").textContent=this.value;});
+document.getElementById("match-tol-slider").addEventListener("input",function(){document.getElementById("match-tol-value").textContent=parseFloat(this.value).toFixed(1)+"°";});
+document.getElementById("max-stars-slider").addEventListener("input",function(){document.getElementById("max-stars-value").textContent=this.value;});
 
 function renderDrawResults(){var div=document.getElementById("match-results");if(!searchResults.length){div.innerHTML="<p style='color:#94a3b8;font-size:12px;text-align:center;'>Aucune correspondance.</p>";return;}var html="";searchResults.forEach(function(r,i){var sc="RMS "+(r.rms*60).toFixed(2)+"′";if(r.maxAngleDiff!=null)sc+=" · Δ° "+r.maxAngleDiff.toFixed(1);if(r.rmsRatios!=null)sc+=" · rat "+r.rmsRatios.toFixed(3)+" / ang "+r.rmsAngles.toFixed(1)+"°";var vc=r.visibility==="visible"?"#22c55e":(r.visibility==="invisible"?"#ef4444":"#f97316");var vl=r.visibility==="visible"?"Visible":(r.visibility==="invisible"?"Invisible":"Partiel");html+="<div class='result-item"+(i===selectedResultIndex?" highlighted":"")+"'><span class='score'>#"+(i+1)+" — "+sc+"</span><br><span style='display:inline-flex;align-items:center;gap:4px;margin-top:2px;'><span style='display:inline-block;width:7px;height:7px;border-radius:50%;background:"+vc+";'></span><span style='font-size:11px;color:"+vc+";'>"+vl+" Paris (22h)</span></span><br><button type='button' class='btn secondary' data-sel='"+i+"' style='margin-right:4px;'>Sélectionner</button><button type='button' class='btn secondary' data-app='"+i+"'>Appliquer</button></div>";});div.innerHTML=html;div.querySelectorAll("button[data-sel]").forEach(function(bt){bt.addEventListener("click",function(){selectedResultIndex=parseInt(bt.getAttribute("data-sel"),10);renderDrawResults();});});div.querySelectorAll("button[data-app]").forEach(function(bt){bt.addEventListener("click",function(){applyResult(parseInt(bt.getAttribute("data-app"),10));});});}
 
