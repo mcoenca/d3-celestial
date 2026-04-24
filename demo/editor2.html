@@ -80,6 +80,7 @@
     #draw-map-wrapper canvas { max-width: 100%; height: auto; }
     #draw-overlay {
       position: absolute; left: 0; top: 0; pointer-events: all; z-index: 5;
+      touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
     }
     #draw-overlay .overlay-hit { fill: transparent; cursor: crosshair; }
     #draw-overlay .star-circle {
@@ -88,6 +89,9 @@
     #draw-overlay .star-circle:hover { fill: #fcd34d; }
     #draw-overlay .star-circle.selected {
       stroke: #60a5fa; stroke-width: 3; filter: drop-shadow(0 0 6px rgba(96,165,250,0.8));
+    }
+    #draw-overlay .star-circle.touch-dragging {
+      fill: #fde68a; stroke: #22d3ee; stroke-width: 4; filter: drop-shadow(0 0 10px rgba(34,211,238,0.85));
     }
     #draw-overlay .edit-line {
       fill: none; stroke: #a78bfa; stroke-width: 2; opacity: 0.9; pointer-events: stroke; cursor: pointer;
@@ -106,6 +110,11 @@
     }
     #zoom-controls button:hover { background: #2a2a3a; }
     #zoom-level-display { color: #94a3b8; font-size: 11px; min-width: 44px; text-align: center; }
+    #touch-help {
+      display: none; margin: 8px 0 10px; padding: 8px 10px;
+      background: #0f172a; border: 1px solid #1e3a8a; border-radius: 8px;
+      color: #bfdbfe; font-size: 12px; line-height: 1.4;
+    }
     #search-panel {
       flex: 0 0 300px; background: #151520;
       border: 1px solid #2a2a3a; border-radius: 8px;
@@ -173,24 +182,49 @@
     #celestial-form { display: none !important; }
 
     @media (max-width: 768px) {
-      .tab-btn { padding: 8px 10px; font-size: 12px; }
-      .nav-link { font-size: 11px; padding: 4px 6px; }
+      body { font-size: 15px; }
+      #tab-bar { padding: 0 6px; gap: 2px; }
+      .tab-btn { padding: 12px 10px; font-size: 12px; min-height: 44px; }
+      .nav-link { font-size: 11px; padding: 10px 6px; }
+      .btn { min-height: 42px; padding: 10px 12px; font-size: 13px; }
       #screen-draw { padding: 10px; }
-      #draw-layout { flex-direction: column; }
+      #draw-layout { flex-direction: column; gap: 12px; }
       #draw-left { width: 100%; }
-      #draw-left h2 { font-size: 15px; }
+      #draw-left h2 { font-size: 16px; }
       .info-line { font-size: 11px; }
-      #editor-toolbar { gap: 6px; padding: 8px; }
-      #editor-toolbar input[type="text"] { width: 120px; }
-      #draw-map-wrapper { width: 100%; }
-      #search-panel { flex: none; width: 100%; max-height: none; position: static; }
+      #touch-help { display: block; }
+      #editor-toolbar { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 10px; }
+      #editor-toolbar label { grid-column: 1 / -1; width: 100%; }
+      #editor-toolbar input[type="text"] { width: 100%; min-height: 40px; font-size: 16px; }
+      #editor-toolbar .star-count { align-self: center; }
+      #image-panel { padding: 10px; }
+      #image-panel input[type="text"] { flex: 1 1 160px; min-height: 40px; font-size: 16px; }
+      #image-panel input[type="number"] { min-height: 38px; font-size: 16px; }
+      .icon-grid { grid-template-columns: repeat(auto-fill, minmax(52px, 1fr)); gap: 8px; max-height: 190px; }
+      #draw-map-wrapper { width: 100%; display: block; margin: 0 auto; overflow: hidden; border-radius: 10px; }
+      #draw-map-wrapper canvas { width: 100% !important; height: auto !important; display: block; }
+      #zoom-controls { right: 8px; bottom: 8px; padding: 6px 8px; }
+      #zoom-controls button { width: 36px; height: 36px; font-size: 20px; }
+      #zoom-level-display { min-width: 48px; font-size: 12px; }
+      #search-panel { flex: none; width: 100%; max-height: none; position: static; padding: 10px; }
+      #search-panel select, #search-panel input, #search-panel button { min-height: 40px; }
+      .result-item { padding: 10px; font-size: 12px; }
+      .result-item button { margin-top: 6px; }
+      #saved-section { padding: 10px; }
       #sky-layout { flex-direction: column; height: auto; min-height: calc(100vh - 48px); }
-      #sky-map-col { width: 100%; flex: none; }
+      #sky-map-col { width: 100%; flex: none; min-height: 55vh; }
       #sky-sidebar {
         flex: none; width: 100%; border-left: none; border-top: 1px solid #1e1e2e;
         max-height: none; padding: 12px;
       }
+      .result-card { min-height: 48px; }
       #sky-legend { top: 6px; left: 6px; padding: 5px 8px; font-size: 10px; }
+    }
+
+    @media (max-width: 420px) {
+      #editor-toolbar { grid-template-columns: 1fr; }
+      #editor-toolbar .btn, #editor-toolbar .star-count { width: 100%; }
+      #search-panel h3 { font-size: 13px; }
     }
   </style>
 </head>
@@ -212,6 +246,7 @@
       <div class="info-line">
         Clic vide = ajouter · Clic étoile = sélectionner · Clic 2e = relier · Clic trait = supprimer · Glisser = déplacer · Clic droit = supprimer.
       </div>
+      <div id="touch-help">Mobile : touchez le ciel pour ajouter, touchez deux étoiles pour les relier, appui long sur une étoile pour la déplacer.</div>
       <div id="editor-toolbar">
         <label>Nom <input type="text" id="constellation-name" placeholder="Ex: Mon triangle" /></label>
         <span class="star-count">Étoiles : <strong id="star-count">0</strong></span>
@@ -342,6 +377,10 @@ var dragState = { active: false, starIndex: -1, didMove: false };
 var searchResults = [];
 var selectedResultIndex = -1;
 var editorZoom = INITIAL_ZOOM;
+var TOUCH_LONG_PRESS_MS = 380;
+var TOUCH_MOVE_CANCEL_PX = 10;
+var touchState = null;
+var suppressNextClick = false;
 
 /* ========================================================================
    MOVE THE SINGLE CELESTIAL CONTAINER BETWEEN PANELS
@@ -529,21 +568,45 @@ function updateDrawOverlay() {
     .attr("y2",function(d){var p=Celestial.mapProjection(editorState.stars[d[1]]);return p?p[1]:0;});
   var stars=g.selectAll(".star-circle").data(editorState.stars,function(d,i){return i;});
   stars.exit().remove();
-  stars.enter().append("circle").attr("class","star-circle").attr("r",8);
+  stars.enter().append("circle").attr("class","star-circle");
   g.selectAll(".star-circle")
+    .attr("r",function(){return isTouchViewport()?11:8;})
     .attr("cx",function(d){var p=Celestial.mapProjection(d);return p?p[0]:0;})
     .attr("cy",function(d){var p=Celestial.mapProjection(d);return p?p[1]:0;})
     .classed("selected",function(d,i){return i===selectedStarIndex;})
-    .on("mousedown",function(d,i){var ev=d3.event;ev.stopPropagation();ev.preventDefault();var el=this;dragState={active:true,starIndex:i,didMove:false};var mH=function(e){if(!dragState.active)return;dragState.didMove=true;var xy=getDrawXY(e);if(!xy)return;var inv=Celestial.mapProjection.invert(xy);if(inv&&!isNaN(inv[0])){editorState.stars[dragState.starIndex]=inv;d3.select(el).attr("cx",xy[0]).attr("cy",xy[1]);rl(g);}};var uH=function(){dragState.active=false;document.removeEventListener("mousemove",mH);document.removeEventListener("mouseup",uH);if(!dragState.didMove)handleStarClick(i);Celestial.redraw();};document.addEventListener("mousemove",mH);document.addEventListener("mouseup",uH);})
+    .on("mousedown",function(d,i){beginMouseStarDrag(this,i,d3.event,g);})
+    .on("touchstart",function(d,i){beginTouchStar(this,i,d3.event,g);})
+    .on("touchmove",function(d,i){moveTouchStar(d3.event,g);})
+    .on("touchend",function(d,i){endTouchStar(d3.event,i);})
+    .on("touchcancel",function(d,i){cancelTouchStar(d3.event);})
     .on("contextmenu",function(d,i){d3.event.preventDefault();removeStarAt(i);Celestial.redraw();});
-  function rl(grp){var ll=editorState.links.filter(function(e){return e[0]>=0&&e[0]<editorState.stars.length&&e[1]>=0&&e[1]<editorState.stars.length&&e[0]!==e[1];});grp.selectAll("line.edit-line").data(ll,function(d){return d[0]+"-"+d[1];}).attr("x1",function(d){var p=Celestial.mapProjection(editorState.stars[d[0]]);return p?p[0]:0;}).attr("y1",function(d){var p=Celestial.mapProjection(editorState.stars[d[0]]);return p?p[1]:0;}).attr("x2",function(d){var p=Celestial.mapProjection(editorState.stars[d[1]]);return p?p[0]:0;}).attr("y2",function(d){var p=Celestial.mapProjection(editorState.stars[d[1]]);return p?p[1]:0;});}
+  function rl(grp){redrawOverlayLines(grp);}
   document.getElementById("star-count").textContent=editorState.stars.length;
   var mb=document.getElementById("btn-match-search");if(mb)mb.disabled=editorState.stars.length<2||editorState.links.length<1;
 }
-function getDrawXY(event){var o=document.getElementById("draw-overlay");if(!o)return null;var r=o.getBoundingClientRect();var w=parseFloat(o.getAttribute("width")),h=parseFloat(o.getAttribute("height"));return [(event.clientX-r.left)*(w/r.width),(event.clientY-r.top)*(h/r.height)];}
+function isTouchViewport(){return window.matchMedia&&window.matchMedia("(pointer: coarse)").matches;}
+function getClientPoint(event){var e=event;if(e&&e.touches&&e.touches.length)e=e.touches[0];else if(e&&e.changedTouches&&e.changedTouches.length)e=e.changedTouches[0];if(!e)return null;return{clientX:e.clientX,clientY:e.clientY};}
+function getDrawXY(event){var o=document.getElementById("draw-overlay");if(!o)return null;var pt=getClientPoint(event);if(!pt)return null;var r=o.getBoundingClientRect();var w=parseFloat(o.getAttribute("width")),h=parseFloat(o.getAttribute("height"));return [(pt.clientX-r.left)*(w/r.width),(pt.clientY-r.top)*(h/r.height)];}
+function isInteractiveTarget(ev){return ev.target&&ev.target.classList&&(ev.target.classList.contains("star-circle")||ev.target.classList.contains("edit-line"));}
+function addStarFromEvent(ev){var xy=getDrawXY(ev);if(!xy)return;var inv=Celestial.mapProjection.invert(xy);if(inv&&!isNaN(inv[0])){var prev=editorState.stars.length;editorState.stars.push(inv);if(prev>0)editorState.links.push([prev-1,prev]);Celestial.redraw();}}
+function beginMouseStarDrag(el,i,ev,g){ev.stopPropagation();ev.preventDefault();dragState={active:true,starIndex:i,didMove:false};var mH=function(e){if(!dragState.active)return;dragState.didMove=true;moveStarFromEvent(e,el,g);};var uH=function(){dragState.active=false;document.removeEventListener("mousemove",mH);document.removeEventListener("mouseup",uH);if(!dragState.didMove)handleStarClick(i);Celestial.redraw();};document.addEventListener("mousemove",mH);document.addEventListener("mouseup",uH);}
+function moveStarFromEvent(ev,el,g){var xy=getDrawXY(ev);if(!xy)return;var inv=Celestial.mapProjection.invert(xy);if(inv&&!isNaN(inv[0])){editorState.stars[dragState.starIndex]=inv;if(el)d3.select(el).attr("cx",xy[0]).attr("cy",xy[1]);redrawOverlayLines(g);}}
+function beginTouchStar(el,i,ev,g){if(!ev.touches||ev.touches.length!==1)return;ev.stopPropagation();ev.preventDefault();var pt=getClientPoint(ev);touchState={type:"star",starIndex:i,el:el,g:g,startX:pt.clientX,startY:pt.clientY,dragging:false,timer:null};touchState.timer=setTimeout(function(){if(!touchState||touchState.type!=="star")return;touchState.dragging=true;dragState={active:true,starIndex:i,didMove:true};d3.select(el).classed("touch-dragging",true);},TOUCH_LONG_PRESS_MS);}
+function moveTouchStar(ev,g){if(!touchState||touchState.type!=="star")return;ev.preventDefault();var pt=getClientPoint(ev);if(!pt)return;var dist=Math.sqrt(Math.pow(pt.clientX-touchState.startX,2)+Math.pow(pt.clientY-touchState.startY,2));if(!touchState.dragging&&dist>TOUCH_MOVE_CANCEL_PX){clearTimeout(touchState.timer);touchState.cancelled=true;return;}if(touchState.dragging){dragState.active=true;dragState.starIndex=touchState.starIndex;dragState.didMove=true;moveStarFromEvent(ev,touchState.el,touchState.g||g);}}
+function endTouchStar(ev,i){if(!touchState||touchState.type!=="star")return;ev.preventDefault();clearTimeout(touchState.timer);var wasDragging=touchState.dragging,wasCancelled=touchState.cancelled;d3.select(touchState.el).classed("touch-dragging",false);touchState=null;dragState.active=false;suppressNextClick=true;setTimeout(function(){suppressNextClick=false;},450);if(!wasDragging&&!wasCancelled)handleStarClick(i);Celestial.redraw();}
+function cancelTouchStar(ev){if(!touchState)return;if(ev)ev.preventDefault();clearTimeout(touchState.timer);if(touchState.el)d3.select(touchState.el).classed("touch-dragging",false);touchState=null;dragState.active=false;Celestial.redraw();}
+function beginOverlayTouch(ev){if(currentMode!=="draw"||isInteractiveTarget(ev))return;if(!ev.touches||ev.touches.length!==1)return;ev.preventDefault();var pt=getClientPoint(ev);touchState={type:"overlay",startX:pt.clientX,startY:pt.clientY,moved:false};}
+function moveOverlayTouch(ev){if(!touchState||touchState.type!=="overlay")return;var pt=getClientPoint(ev);if(!pt)return;var dist=Math.sqrt(Math.pow(pt.clientX-touchState.startX,2)+Math.pow(pt.clientY-touchState.startY,2));if(dist>TOUCH_MOVE_CANCEL_PX)touchState.moved=true;}
+function endOverlayTouch(ev){if(!touchState||touchState.type!=="overlay")return;ev.preventDefault();var shouldAdd=!touchState.moved;touchState=null;suppressNextClick=true;setTimeout(function(){suppressNextClick=false;},450);if(shouldAdd)addStarFromEvent(ev);}
+function redrawOverlayLines(grp){var ll=editorState.links.filter(function(e){return e[0]>=0&&e[0]<editorState.stars.length&&e[1]>=0&&e[1]<editorState.stars.length&&e[0]!==e[1];});grp.selectAll("line.edit-line").data(ll,function(d){return d[0]+"-"+d[1];}).attr("x1",function(d){var p=Celestial.mapProjection(editorState.stars[d[0]]);return p?p[0]:0;}).attr("y1",function(d){var p=Celestial.mapProjection(editorState.stars[d[0]]);return p?p[1]:0;}).attr("x2",function(d){var p=Celestial.mapProjection(editorState.stars[d[1]]);return p?p[0]:0;}).attr("y2",function(d){var p=Celestial.mapProjection(editorState.stars[d[1]]);return p?p[1]:0;});}
 function handleStarClick(i){if(selectedStarIndex===null){selectedStarIndex=i;return;}if(selectedStarIndex===i){selectedStarIndex=null;return;}var a=Math.min(selectedStarIndex,i),b=Math.max(selectedStarIndex,i);if(!editorState.links.some(function(e){return e[0]===a&&e[1]===b;}))editorState.links.push([a,b]);selectedStarIndex=null;}
 function removeStarAt(i){editorState.stars.splice(i,1);editorState.links=editorState.links.filter(function(e){return e[0]!==i&&e[1]!==i;}).map(function(e){return [e[0]>i?e[0]-1:e[0],e[1]>i?e[1]-1:e[1]];}).filter(function(e){return e[0]!==e[1];});if(selectedStarIndex===i)selectedStarIndex=null;else if(selectedStarIndex>i)selectedStarIndex--;}
-d3.select("#draw-overlay").on("click",function(){if(currentMode!=="draw")return;var ev=d3.event;if(dragState.didMove){dragState.didMove=false;return;}if(ev.target&&ev.target.classList&&(ev.target.classList.contains("star-circle")||ev.target.classList.contains("edit-line")))return;var xy=getDrawXY(ev);if(!xy)return;var inv=Celestial.mapProjection.invert(xy);if(inv&&!isNaN(inv[0])){var prev=editorState.stars.length;editorState.stars.push(inv);if(prev>0)editorState.links.push([prev-1,prev]);Celestial.redraw();}});
+d3.select("#draw-overlay")
+  .on("click",function(){if(currentMode!=="draw")return;var ev=d3.event;if(suppressNextClick){suppressNextClick=false;return;}if(dragState.didMove){dragState.didMove=false;return;}if(isInteractiveTarget(ev))return;addStarFromEvent(ev);})
+  .on("touchstart",function(){beginOverlayTouch(d3.event);})
+  .on("touchmove",function(){moveOverlayTouch(d3.event);})
+  .on("touchend",function(){endOverlayTouch(d3.event);})
+  .on("touchcancel",function(){touchState=null;});
 document.getElementById("constellation-name").addEventListener("input",function(){editorState.name=this.value.trim();});
 document.getElementById("btn-remove-star").addEventListener("click",function(){if(editorState.stars.length){removeStarAt(editorState.stars.length-1);Celestial.redraw();}});
 
