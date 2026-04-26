@@ -277,30 +277,47 @@ Celestial.display = function(config) {
     //redraw();
   }
   
-  // Zoom by factor; >1 larger <1 smaller 
-  function zoomBy(factor) {
+  // Zoom by factor; >1 larger <1 smaller. When a focal point is supplied,
+  // keep that screen position stable while zoomed in. Once the map returns to
+  // its base scale, snap the projection back to the canonical centered view.
+  function zoomBy(factor, point) {
     if (!factor || factor === 1) return;
     var sc0 = mapProjection.scale(),
         sc1 = sc0 * factor,
         ext = zoom.scaleExtent(),
-        interval = ANIMINTERVAL_Z * Math.sqrt(Math.abs(1-factor));
+        interval = ANIMINTERVAL_Z * Math.sqrt(Math.abs(1-factor)),
+        tr;
         
     if (sc1 < ext[0]) sc1 = ext[0];
     if (sc1 > ext[1]) sc1 = ext[1];
+    factor = sc1 / sc0;
+    if (typeof mapProjection.translate === "function") {
+      if (Math.abs(sc1 - ext[0]) < 0.001) {
+        tr = [canvaswidth / 2, canvasheight / 2];
+      } else if (point && isNumber(point[0]) && isNumber(point[1])) {
+        tr = mapProjection.translate();
+        point = [point[0], point[1]];
+        tr = [point[0] - (point[0] - tr[0]) * factor, point[1] - (point[1] - tr[1]) * factor];
+      }
+    }
     if (cfg.disableAnimations === true) { 
-      mapProjection.scale(sc1); 
+      mapProjection.scale(sc1);
+      if (tr) mapProjection.translate(tr);
       zoom.scale(sc1); 
       redraw(); 
       return 0; 
     }
     var zTween = d3.interpolateNumber(sc0, sc1);
+    var tTween = tr ? [d3.interpolateNumber(mapProjection.translate()[0], tr[0]), d3.interpolateNumber(mapProjection.translate()[1], tr[1])] : null;
     d3.select({}).transition().duration(interval).tween("scale", function () {
         return function(t) {
           var z = zTween(t);
-          mapProjection.scale(z); 
+          mapProjection.scale(z);
+          if (tTween) mapProjection.translate([tTween[0](t), tTween[1](t)]);
           redraw(); 
         };
     }).transition().duration(0).tween("scale", function () {
+      if (tr) mapProjection.translate(tr);
       zoom.scale(sc1); 
       redraw(); 
     });
@@ -968,7 +985,7 @@ Celestial.display = function(config) {
   this.apply = function(config) { apply(config); }; 
   this.reproject = function(config) { return reproject(config); }; 
   this.rotate = function(config) { if (!config) return cfg.center; return rotate(config); }; 
-  this.zoomBy = function(factor) { if (!factor) return mapProjection.scale()/scale; return zoomBy(factor); };
+  this.zoomBy = function(factor, point) { if (!factor) return mapProjection.scale()/scale; return zoomBy(factor, point); };
   this.color = function(type) {
     if (!type) return "#000";
     if (has(cfg.dsos.symbols, type)) return cfg.dsos.symbols[type].fill;

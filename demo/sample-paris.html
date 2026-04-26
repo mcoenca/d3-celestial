@@ -27,6 +27,13 @@
     }
     #celestial-map {
       margin: 0 auto;
+      min-width: 0;
+      max-width: 100%;
+    }
+    #celestial-map canvas {
+      max-width: 100%;
+      height: auto;
+      touch-action: none;
     }
   </style>
 </head>
@@ -226,6 +233,8 @@ function fixZoomNoRotation() {
   var canvas = d3.select("#celestial-map canvas");
   if (!canvas.node()) return;
   var fixedRotation = Celestial.mapProjection.rotate().slice();
+  var baseTranslate = Celestial.mapProjection.translate().slice();
+  var baseZoom = Celestial.zoomBy() || 1;
   canvas.on("mousedown.zoom", null);
   canvas.on("touchstart.zoom", null);
   var originalZoom = canvas.on("zoom");
@@ -233,6 +242,50 @@ function fixZoomNoRotation() {
     Celestial.mapProjection.rotate(fixedRotation);
     if (originalZoom) originalZoom.apply(this, arguments);
   });
+  enableTouchZoom(document.getElementById("celestial-map"), baseZoom, baseTranslate);
+}
+
+function getCelestialPointFromClient(container, x, y) {
+  if (!container) return null;
+  var canvas = container.querySelector("canvas");
+  if (!canvas) return null;
+  var rect = canvas.getBoundingClientRect();
+  var dpr = window.devicePixelRatio || 1;
+  return [(x - rect.left) * ((canvas.width / dpr) / rect.width), (y - rect.top) * ((canvas.height / dpr) / rect.height)];
+}
+
+function enableTouchZoom(container, baseZoom, baseTranslate) {
+  if (!container || container.__touchZoomBound) return;
+  container.__touchZoomBound = true;
+  var pinch = null;
+  function distance(a, b) {
+    var dx = a.clientX - b.clientX, dy = a.clientY - b.clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+  function centerPoint(a, b) {
+    return getCelestialPointFromClient(container, (a.clientX + b.clientX) / 2, (a.clientY + b.clientY) / 2);
+  }
+  container.addEventListener("touchstart", function(e) {
+    if (e.touches.length === 2) {
+      pinch = { distance: distance(e.touches[0], e.touches[1]), zoom: Celestial.zoomBy() || 1 };
+      e.preventDefault();
+    }
+  }, { passive: false });
+  container.addEventListener("touchmove", function(e) {
+    if (!pinch || e.touches.length !== 2) return;
+    var target = Math.max(0.3, Math.min(10, pinch.zoom * distance(e.touches[0], e.touches[1]) / pinch.distance));
+    var current = Celestial.zoomBy() || 1;
+    Celestial.zoomBy(target / current, centerPoint(e.touches[0], e.touches[1]));
+    if (Math.abs(target - baseZoom) < 0.03 && baseTranslate) {
+      Celestial.mapProjection.translate(baseTranslate);
+      Celestial.redraw();
+    }
+    e.preventDefault();
+  }, { passive: false });
+  container.addEventListener("touchend", function(e) {
+    if (e.touches.length < 2) pinch = null;
+  }, { passive: false });
+  container.addEventListener("touchcancel", function() { pinch = null; }, { passive: false });
 }
 
 // Initialiser la carte
