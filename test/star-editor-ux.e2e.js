@@ -51,7 +51,7 @@ async function main() {
   await new Promise((resolve) => server.listen(PORT, HOST, resolve));
 
   const browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext({ acceptDownloads: true });
+  const context = await browser.newContext({ acceptDownloads: true, hasTouch: true });
   const page = await context.newPage();
 
   const dialogs = [];
@@ -72,6 +72,7 @@ async function main() {
     await page.waitForTimeout(2000);
 
     const overlay = page.locator("#constellation-overlay");
+    await overlay.scrollIntoViewIfNeeded();
     const overlayBox = await overlay.boundingBox();
     assert.ok(overlayBox, "Overlay introuvable");
 
@@ -152,7 +153,7 @@ async function main() {
     assert.strictEqual(await getStarCount(), 1, "Le clic droit doit supprimer la dernière étoile");
 
     // 4) Re-ajout + sauvegarde.
-    await clickAt(0.62, 0.40);
+    await clickAt(0.50, 0.40);
     assert.strictEqual(await getStarCount(), 2, "Le compteur après ré-ajout doit être 2");
     await page.fill("#constellation-name", "Test UX");
     await page.click("#btn-save");
@@ -183,8 +184,10 @@ async function main() {
     );
     await page.evaluate(() => localStorage.removeItem("customConstellations"));
     await page.waitForTimeout(2000);
+    await overlay.scrollIntoViewIfNeeded();
 
     const tapAt = async (relX, relY) => {
+      await overlay.scrollIntoViewIfNeeded();
       const box = await overlay.boundingBox();
       assert.ok(box, "Overlay mobile non mesurable");
       await page.touchscreen.tap(box.x + box.width * relX, box.y + box.height * relY);
@@ -206,18 +209,16 @@ async function main() {
       x: touchGeom.left + beforeTouchDrag.cx * (touchGeom.width / touchGeom.svgWidth),
       y: touchGeom.top + beforeTouchDrag.cy * (touchGeom.height / touchGeom.svgHeight)
     };
-    await page.dispatchEvent("#constellation-overlay .star-circle", "touchstart", {
-      touches: [{ identifier: 1, clientX: touchStart.x, clientY: touchStart.y }],
-      changedTouches: [{ identifier: 1, clientX: touchStart.x, clientY: touchStart.y }]
+    const cdp = await context.newCDPSession(page);
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchStart",
+      touchPoints: [{ x: touchStart.x, y: touchStart.y, radiusX: 4, radiusY: 4 }]
     });
-    await page.dispatchEvent("body", "touchmove", {
-      touches: [{ identifier: 1, clientX: touchStart.x + 32, clientY: touchStart.y + 24 }],
-      changedTouches: [{ identifier: 1, clientX: touchStart.x + 32, clientY: touchStart.y + 24 }]
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchMove",
+      touchPoints: [{ x: touchStart.x + 32, y: touchStart.y + 24, radiusX: 4, radiusY: 4 }]
     });
-    await page.dispatchEvent("body", "touchend", {
-      touches: [],
-      changedTouches: [{ identifier: 1, clientX: touchStart.x + 32, clientY: touchStart.y + 24 }]
-    });
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
     await page.waitForTimeout(200);
     const afterTouchDrag = await page.evaluate(() => {
       const c = document.querySelector("#constellation-overlay .star-circle");
@@ -243,33 +244,21 @@ async function main() {
     assert.ok(boxForPinch, "Overlay mobile non mesurable pour pinch");
     const cx = boxForPinch.x + boxForPinch.width / 2;
     const cy = boxForPinch.y + boxForPinch.height / 2;
-    await page.dispatchEvent("#constellation-overlay", "touchstart", {
-      touches: [
-        { identifier: 1, clientX: cx - 20, clientY: cy },
-        { identifier: 2, clientX: cx + 20, clientY: cy }
-      ],
-      changedTouches: [
-        { identifier: 1, clientX: cx - 20, clientY: cy },
-        { identifier: 2, clientX: cx + 20, clientY: cy }
-      ]
-    });
-    await page.dispatchEvent("#constellation-overlay", "touchmove", {
-      touches: [
-        { identifier: 1, clientX: cx - 45, clientY: cy },
-        { identifier: 2, clientX: cx + 45, clientY: cy }
-      ],
-      changedTouches: [
-        { identifier: 1, clientX: cx - 45, clientY: cy },
-        { identifier: 2, clientX: cx + 45, clientY: cy }
-      ]
-    });
-    await page.dispatchEvent("#constellation-overlay", "touchend", {
-      touches: [],
-      changedTouches: [
-        { identifier: 1, clientX: cx - 45, clientY: cy },
-        { identifier: 2, clientX: cx + 45, clientY: cy }
-      ]
-    });
+    await page.evaluate(({ cx, cy }) => {
+      const overlay = document.getElementById("constellation-overlay");
+      const fire = (type, touches, changedTouches) => {
+        const makeTouch = (t) => new Touch({ identifier: t.id, target: overlay, clientX: t.x, clientY: t.y });
+        overlay.dispatchEvent(new TouchEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          touches: touches.map(makeTouch),
+          changedTouches: changedTouches.map(makeTouch)
+        }));
+      };
+      fire("touchstart", [{ id: 1, x: cx - 20, y: cy }, { id: 2, x: cx + 20, y: cy }], [{ id: 1, x: cx - 20, y: cy }, { id: 2, x: cx + 20, y: cy }]);
+      fire("touchmove", [{ id: 1, x: cx - 45, y: cy }, { id: 2, x: cx + 45, y: cy }], [{ id: 1, x: cx - 45, y: cy }, { id: 2, x: cx + 45, y: cy }]);
+      fire("touchend", [], [{ id: 1, x: cx - 45, y: cy }, { id: 2, x: cx + 45, y: cy }]);
+    }, { cx, cy });
     await page.waitForTimeout(150);
     const zoomAfter = await page.locator("#zoom-level-display").textContent();
     assert.notStrictEqual(zoomAfter, zoomBefore, "Le pinch tactile doit modifier le zoom");

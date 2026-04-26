@@ -540,7 +540,9 @@
 
   function activeTouches(ev) {
     if (!ev) return [];
-    return Array.prototype.slice.call(ev.touches || ev.changedTouches || []);
+    if (ev.touches && ev.touches.length) return Array.prototype.slice.call(ev.touches);
+    if (ev.changedTouches && ev.changedTouches.length) return Array.prototype.slice.call(ev.changedTouches);
+    return [];
   }
 
   function isTouchLikeEvent(ev) {
@@ -615,7 +617,13 @@
       document.removeEventListener(upType, upHandler, false);
       if (cancelType) document.removeEventListener(cancelType, upHandler, false);
       if (!dragState.didMove) handleStarClick(starIndex);
-      else ignoreNextClick = true;
+      else {
+        ignoreNextClick = true;
+        setTimeout(function() {
+          ignoreNextClick = false;
+          dragState.didMove = false;
+        }, 250);
+      }
       Celestial.redraw();
     };
     document.addEventListener(moveType, moveHandler, { passive: false });
@@ -978,6 +986,9 @@
         removeStarAtIndex(i);
         Celestial.redraw();
       });
+    g.selectAll(".star-circle").each(function() {
+      this.parentNode.appendChild(this);
+    });
 
     function redrawOverlayLines(grp) {
       var linkList = editorState.links.filter(function(edge) {
