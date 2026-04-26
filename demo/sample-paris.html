@@ -2,6 +2,7 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>D3-Celestial - Ciel de Paris Aujourd'hui</title>
   <script type="text/javascript" src="../lib/d3.min.js"></script>
   <script type="text/javascript" src="../lib/d3.geo.projection.min.js"></script>
@@ -14,7 +15,9 @@
       background-color: #000;
       color: #fff;
       font-family: Arial, sans-serif;
+      box-sizing: border-box;
     }
+    * { box-sizing: inherit; }
     h1 {
       text-align: center;
       margin-bottom: 10px;
@@ -27,6 +30,27 @@
     }
     #celestial-map {
       margin: 0 auto;
+      max-width: 100%;
+      touch-action: none;
+    }
+    #celestial-map canvas {
+      max-width: 100%;
+      height: auto;
+      display: block;
+      margin: 0 auto;
+    }
+    #celestial-zoomin,
+    #celestial-zoomout {
+      min-width: 40px;
+      min-height: 40px;
+      font-size: 20px;
+      touch-action: manipulation;
+    }
+    @media (max-width: 768px) {
+      body { padding: 10px; }
+      h1 { font-size: 20px; }
+      .info { font-size: 12px; line-height: 1.45; }
+      #celestial-params { max-width: 100% !important; }
     }
   </style>
 </head>
@@ -233,6 +257,50 @@ function fixZoomNoRotation() {
     Celestial.mapProjection.rotate(fixedRotation);
     if (originalZoom) originalZoom.apply(this, arguments);
   });
+}
+
+function activeTouches(ev) {
+  if (!ev) return [];
+  return Array.prototype.slice.call(ev.touches || []);
+}
+
+function touchDistance(touches) {
+  if (!touches || touches.length < 2) return 0;
+  var dx = touches[0].clientX - touches[1].clientX;
+  var dy = touches[0].clientY - touches[1].clientY;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+function installParisPinchZoom() {
+  var el = document.getElementById("celestial-map");
+  if (!el) return;
+  var pinch = { active: false, distance: 0, scale: 0 };
+  el.addEventListener("touchstart", function(ev) {
+    var touches = activeTouches(ev);
+    if (touches.length < 2 || !Celestial.mapProjection) return;
+    ev.preventDefault();
+    pinch = { active: true, distance: touchDistance(touches), scale: Celestial.mapProjection.scale() };
+  }, { passive: false });
+  el.addEventListener("touchmove", function(ev) {
+    var touches = activeTouches(ev);
+    if (!pinch.active || touches.length < 2) return;
+    ev.preventDefault();
+    var dist = touchDistance(touches);
+    if (pinch.distance <= 0 || dist <= 0) return;
+    var extent = Celestial.metrics();
+    var target = pinch.scale * dist / pinch.distance;
+    var min = extent.scale / Math.max(config.zoomlevel || 1, 1);
+    var max = min * (config.zoomextend || 10);
+    target = Math.max(min, Math.min(max, target));
+    Celestial.mapProjection.scale(target);
+    Celestial.redraw();
+  }, { passive: false });
+  el.addEventListener("touchend", function(ev) {
+    if (activeTouches(ev).length < 2) pinch.active = false;
+  }, { passive: false });
+  el.addEventListener("touchcancel", function() {
+    pinch.active = false;
+  }, { passive: false });
 }
 
 // Initialiser la carte
