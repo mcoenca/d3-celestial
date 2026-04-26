@@ -8,12 +8,16 @@
   <script type="text/javascript" src="../celestial.min.js"></script>
   <link rel="stylesheet" href="../celestial.css">
   <style>
+    * {
+      box-sizing: border-box;
+    }
     body {
       margin: 0;
       padding: 16px;
       background-color: #0a0a12;
       color: #e0e0e0;
       font-family: 'Segoe UI', system-ui, sans-serif;
+      overflow-x: hidden;
     }
     h1 {
       text-align: center;
@@ -87,12 +91,16 @@
       position: relative;
       margin: 0 auto;
       display: inline-block;
+      max-width: 100%;
+      touch-action: none;
     }
+    #celestial-map-wrapper canvas { max-width: 100%; height: auto; touch-action: none; }
     #constellation-overlay {
       position: absolute;
       left: 0;
       top: 0;
       pointer-events: all;
+      touch-action: none;
     }
     #constellation-overlay .overlay-hit {
       fill: transparent;
@@ -104,6 +112,7 @@
       stroke-width: 2;
       cursor: move;
       pointer-events: all;
+      touch-action: none;
     }
     #constellation-overlay .star-circle:hover {
       fill: #fcd34d;
@@ -280,6 +289,22 @@
     }
     #match-panel .result-item .score { color: #94a3b8; }
     #match-panel .result-item button { margin-top: 6px; }
+    @media (max-width: 768px) {
+      body { padding: 10px; }
+      h1 { font-size: 20px; }
+      .info { font-size: 12px; line-height: 1.45; }
+      #editor-layout { flex-direction: column; }
+      #editor-left, #match-panel { width: 100%; flex: none; }
+      #match-panel { position: static; max-height: none; }
+      #editor-toolbar { gap: 8px; }
+      #editor-toolbar label { width: 100%; align-items: flex-start; flex-direction: column; }
+      #editor-toolbar input[type="text"] { width: 100%; }
+      #celestial-map-wrapper { width: 100%; display: block; }
+      #constellation-overlay .edit-line { stroke-width: 8; opacity: 0.75; }
+      #zoom-controls { bottom: 8px; right: 8px; padding: 6px 8px; }
+      #zoom-controls button { width: 36px; height: 36px; font-size: 20px; }
+      #zoom-level-display { min-width: 50px; font-size: 12px; }
+    }
   </style>
 </head>
 <body>
@@ -301,7 +326,7 @@
     <button type="button" class="secondary" id="btn-export">Exporter custom-stars.json</button>
   </div>
 
-  <div id="image-background-panel" style="margin-bottom:16px; padding:12px; background:#151520; border-radius:8px; border:1px solid #2a2a3a;">
+  <div id="image-background-panel" style="margin-bottom:12px; padding:8px 10px; background:#151520; border-radius:8px; border:1px solid #2a2a3a;">
     <div style="font-weight:600; margin-bottom:8px; color:#e0e0e0;">Image de fond (icône animal)</div>
     <div style="display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-bottom:10px;">
       <input type="text" id="icon-search" placeholder="Ex: animal, lion, cat" style="padding:6px 10px; border:1px solid #3a3a4a; border-radius:4px; background:#1a1a24; color:#e0e0e0; width:180px;" />
@@ -318,7 +343,7 @@
       <button type="button" class="secondary" id="btn-remove-icon">Retirer l'image</button>
       <span id="icon-selected-label" style="color:#94a3b8; font-size:13px;"></span>
     </div>
-    <div id="icon-grid" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(48px, 1fr)); gap:8px; max-height:200px; overflow-y:auto;"></div>
+    <div id="icon-grid" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(48px, 1fr)); gap:8px; max-height:90px; overflow-y:auto;"></div>
   </div>
 
   <div id="celestial-map-wrapper">
@@ -448,7 +473,7 @@
 
   // Configuration : uniquement la Petite Ourse, canvas réduit, pas de zoom
   var config = {
-    width: 420,
+    width: Math.min(Math.max(window.innerWidth - 40, 280), 420),
     projection: "airy",
     transform: "equatorial",
     background: { fill: "#000000", stroke: "#333", width: 1, opacity: 1 },
@@ -501,13 +526,20 @@
     el.textContent = "×" + editorZoom.toFixed(1);
   }
 
-  function setZoomAbsolute(targetZoom) {
+  function getOverlayCenterPoint() {
+    var overlay = document.getElementById("constellation-overlay");
+    if (!overlay) return null;
+    return [parseFloat(overlay.getAttribute("width")) / 2, parseFloat(overlay.getAttribute("height")) / 2];
+  }
+
+  function setZoomAbsolute(targetZoom, point) {
     targetZoom = Math.max(0.3, Math.min(20, targetZoom));
     var factor = targetZoom / editorZoom;
     if (Math.abs(factor - 1) < 0.001) return;
-    Celestial.zoomBy(factor);
+    Celestial.zoomBy(factor, point || getOverlayCenterPoint());
     editorZoom = targetZoom;
     updateZoomDisplay();
+    setTimeout(updateOverlay, 0);
   }
 
   document.getElementById("btn-zoom-in").addEventListener("click", function() {
@@ -517,6 +549,20 @@
   document.getElementById("btn-zoom-out").addEventListener("click", function() {
     setZoomAbsolute(editorZoom / ZOOM_STEP);
   });
+
+  function distanceBetweenEvents(a, b) {
+    var dx = a.clientX - b.clientX, dy = a.clientY - b.clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+
+  function overlayPointFromClient(x, y) {
+    var overlay = document.getElementById("constellation-overlay");
+    if (!overlay) return null;
+    var rect = overlay.getBoundingClientRect();
+    var w = parseFloat(overlay.getAttribute("width"));
+    var h = parseFloat(overlay.getAttribute("height"));
+    return [(x - rect.left) * (w / rect.width), (y - rect.top) * (h / rect.height)];
+  }
 
   setTimeout(function() {
     // Retirer du DOM toutes les constellations sauf Petite Ourse (une fois qu'elles sont chargées)
@@ -665,11 +711,12 @@
       .on("click", function(d) {
         d3.event.stopPropagation();
         d3.event.preventDefault();
-        var idx = editorState.links.indexOf(d);
-        if (idx !== -1) {
-          editorState.links.splice(idx, 1);
-          Celestial.redraw();
-        }
+        removeLink(d);
+      })
+      .on("touchend", function(d) {
+        d3.event.stopPropagation();
+        d3.event.preventDefault();
+        removeLink(d);
       });
     g.selectAll("line.edit-line")
       .attr("x1", function(d) {
@@ -688,6 +735,7 @@
         var p = Celestial.mapProjection(editorState.stars[d[1]]);
         return p ? p[1] : 0;
       })
+      .attr("data-link-key", function(d) { return d[0] + "-" + d[1]; })
       .style("stroke", function(d) {
         if (!angleDiffs) return "#a78bfa";
         var m = Math.max(angleDiffs[d[0]] || 0, angleDiffs[d[1]] || 0);
@@ -807,44 +855,29 @@
         var p = Celestial.mapProjection(d);
         return p ? p[1] : 0;
       })
+      .attr("data-star-index", function(d, i) { return i; })
       .classed("selected", function(d, i) { return i === selectedStarIndex; })
       .on("mousedown", function(d, i) {
         var ev = d3.event;
+        if (ignoreSyntheticMouse(ev)) return;
         ev.stopPropagation();
         ev.preventDefault();
-        var circleEl = this;
-        dragState.active = true;
-        dragState.starIndex = i;
-        dragState.didMove = false;
-        var moveHandler = function(e) {
-          if (!dragState.active) return;
-          dragState.didMove = true;
-          var xy = getOverlayXY(e);
-          if (!xy) return;
-          var inv = Celestial.mapProjection.invert(xy);
-          if (inv && !isNaN(inv[0])) {
-            editorState.stars[dragState.starIndex] = inv;
-            d3.select(circleEl).attr("cx", xy[0]).attr("cy", xy[1]);
-            redrawOverlayLines(g);
-          }
-        };
-        var upHandler = function() {
-          dragState.active = false;
-          document.removeEventListener("mousemove", moveHandler);
-          document.removeEventListener("mouseup", upHandler);
-          if (!dragState.didMove) {
-            handleStarClick(i);
-          }
-          Celestial.redraw();
-        };
-        document.addEventListener("mousemove", moveHandler);
-        document.addEventListener("mouseup", upHandler);
+        startStarDrag(i, ev, this);
+      })
+      .on("touchstart", function(d, i) {
+        var ev = d3.event;
+        ev.stopPropagation();
+        ev.preventDefault();
+        startStarDrag(i, ev, this);
       })
       .on("contextmenu", function(d, i) {
         d3.event.preventDefault();
         removeStarAtIndex(i);
         Celestial.redraw();
       });
+    g.selectAll(".star-circle").each(function() {
+      this.parentNode.appendChild(this);
+    });
 
     function redrawOverlayLines(grp) {
       var linkList = editorState.links.filter(function(edge) {
@@ -893,11 +926,12 @@
         .on("click", function(d) {
           d3.event.stopPropagation();
           d3.event.preventDefault();
-          var idx = editorState.links.indexOf(d);
-          if (idx !== -1) {
-            editorState.links.splice(idx, 1);
-            Celestial.redraw();
-          }
+          removeLink(d);
+        })
+        .on("touchend", function(d) {
+          d3.event.stopPropagation();
+          d3.event.preventDefault();
+          removeLink(d);
         });
     }
 
@@ -906,9 +940,16 @@
     if (matchBtn) matchBtn.disabled = editorState.stars.length < 2 || editorState.links.length < 1;
   }
 
+  function getEventPoint(event) {
+    if (event && event.touches && event.touches.length) return event.touches[0];
+    if (event && event.changedTouches && event.changedTouches.length) return event.changedTouches[0];
+    return event;
+  }
+
   function getOverlayXY(event) {
+    event = getEventPoint(event);
     var overlay = document.getElementById("constellation-overlay");
-    if (!overlay) return null;
+    if (!overlay || !event) return null;
     var rect = overlay.getBoundingClientRect();
     var x = event.clientX - rect.left;
     var y = event.clientY - rect.top;
@@ -955,16 +996,21 @@
     else if (selectedStarIndex > i) selectedStarIndex--;
   }
 
-  // Clic sur l'overlay (zone vide) = ajouter une étoile. Ne pas ajouter si on vient de lâcher un drag.
-  d3.select("#constellation-overlay").on("click", function() {
-    var ev = d3.event;
-    if (dragState.didMove) {
-      dragState.didMove = false;
-      return;
+  var lastTouchTime = 0;
+  function ignoreSyntheticMouse() {
+    return Date.now() - lastTouchTime < 700;
+  }
+
+  function removeLink(link) {
+    var idx = editorState.links.indexOf(link);
+    if (idx !== -1) {
+      editorState.links.splice(idx, 1);
+      Celestial.redraw();
     }
-    if (ev.target && ev.target.classList && ev.target.classList.contains("star-circle")) return;
-    if (ev.target && ev.target.classList && ev.target.classList.contains("edit-line")) return;
-    var xy = getOverlayXY(ev);
+  }
+
+  function addStarAtEvent(event) {
+    var xy = getOverlayXY(event);
     if (!xy) return;
     var inv = Celestial.mapProjection.invert(xy);
     if (inv && !isNaN(inv[0])) {
@@ -975,7 +1021,76 @@
       }
       Celestial.redraw();
     }
+  }
+
+  function updateDraggedStar(index, event, circleEl) {
+    var xy = getOverlayXY(event);
+    if (!xy) return;
+    var inv = Celestial.mapProjection.invert(xy);
+    if (inv && !isNaN(inv[0])) {
+      editorState.stars[index] = inv;
+      if (circleEl) d3.select(circleEl).attr("cx", xy[0]).attr("cy", xy[1]);
+      Celestial.redraw();
+    }
+  }
+
+  function startStarDrag(index, event, circleEl) {
+    var isTouch = event && event.type && event.type.indexOf("touch") === 0;
+    var moveEvent = isTouch ? "touchmove" : "mousemove";
+    var upEvent = isTouch ? "touchend" : "mouseup";
+    if (isTouch) lastTouchTime = Date.now();
+    dragState.active = true;
+    dragState.starIndex = index;
+    dragState.didMove = false;
+    function moveHandler(e) {
+      if (!dragState.active) return;
+      dragState.didMove = true;
+      if (isTouch) lastTouchTime = Date.now();
+      updateDraggedStar(index, e, circleEl);
+      if (e.cancelable) e.preventDefault();
+    }
+    function upHandler(e) {
+      if (isTouch) lastTouchTime = Date.now();
+      dragState.active = false;
+      document.removeEventListener(moveEvent, moveHandler);
+      document.removeEventListener(upEvent, upHandler);
+      if (!dragState.didMove) handleStarClick(index);
+      Celestial.redraw();
+      if (e && e.cancelable) e.preventDefault();
+    }
+    document.addEventListener(moveEvent, moveHandler, { passive: false });
+    document.addEventListener(upEvent, upHandler, { passive: false });
+  }
+
+  function bindTouchDrawInteractions() {
+    var overlay = document.getElementById("constellation-overlay");
+    if (!overlay || overlay.__touchDrawBound) return;
+    overlay.__touchDrawBound = true;
+    overlay.addEventListener("touchend", function(ev) {
+      if (ev.touches && ev.touches.length) return;
+      var touch = ev.changedTouches && ev.changedTouches[0];
+      if (!touch) return;
+      lastTouchTime = Date.now();
+      if (ev.target && ev.target.classList && ev.target.classList.contains("edit-line")) return;
+      if (ev.target && ev.target.classList && ev.target.classList.contains("star-circle")) return;
+      ev.preventDefault();
+      addStarAtEvent(touch);
+    }, { passive: false });
+  }
+
+  // Clic sur l'overlay (zone vide) = ajouter une étoile. Ne pas ajouter si on vient de lâcher un drag.
+  d3.select("#constellation-overlay").on("click", function() {
+    var ev = d3.event;
+    if (ignoreSyntheticMouse()) return;
+    if (dragState.didMove) {
+      dragState.didMove = false;
+      return;
+    }
+    if (ev.target && ev.target.classList && ev.target.classList.contains("star-circle")) return;
+    if (ev.target && ev.target.classList && ev.target.classList.contains("edit-line")) return;
+    addStarAtEvent(ev);
   });
+  bindTouchDrawInteractions();
 
   document.getElementById("constellation-name").addEventListener("input", function() {
     editorState.name = this.value.trim();
