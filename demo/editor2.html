@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>D3-Celestial - Éditeur v2 (WYSIWYG)</title>
   <script type="text/javascript" src="../lib/d3.min.js"></script>
   <script type="text/javascript" src="../lib/d3.geo.projection.min.js"></script>
@@ -38,7 +38,9 @@
     .btn {
       padding: 7px 12px; border: none; border-radius: 6px;
       cursor: pointer; font-weight: 500; font-size: 13px; transition: background 0.15s;
+      touch-action: manipulation;
     }
+    button, input, select { touch-action: manipulation; }
     .btn.primary { background: #3b82f6; color: #fff; }
     .btn.primary:hover { background: #2563eb; }
     .btn.secondary { background: #374151; color: #e0e0e0; }
@@ -716,9 +718,10 @@ function updateDraggedStar(index, event, circleEl){var xy=getDrawXY(event);if(!x
 function addStarAtEvent(event){if(currentMode!=="draw")return;var xy=getDrawXY(event);if(!xy)return;var inv=Celestial.mapProjection.invert(xy);if(inv&&!isNaN(inv[0])){var prev=editorState.stars.length;editorState.stars.push(inv);if(prev>0)editorState.links.push([prev-1,prev]);afterEditorChange();Celestial.redraw();}}
 function removeLink(link){var i=editorState.links.indexOf(link);if(i!==-1){editorState.links.splice(i,1);afterEditorChange();Celestial.redraw();}}
 function removeLinkByKey(key){if(!key)return;for(var i=0;i<editorState.links.length;i++){if(editorState.links[i][0]+"-"+editorState.links[i][1]===key){editorState.links.splice(i,1);afterEditorChange();Celestial.redraw();return;}}}
-function startStarDrag(index,event,circleEl){var isTouch=event&&event.type&&event.type.indexOf("touch")===0,move=isTouch?"touchmove":"mousemove",up=isTouch?"touchend":"mouseup";if(isTouch)lastTouchTime=Date.now();dragState={active:true,starIndex:index,didMove:false};function mH(e){if(!dragState.active)return;dragState.didMove=true;if(isTouch)lastTouchTime=Date.now();updateDraggedStar(index,e,circleEl);if(e.cancelable)e.preventDefault();}function uH(e){if(isTouch)lastTouchTime=Date.now();dragState.active=false;document.removeEventListener(move,mH);document.removeEventListener(up,uH);if(!dragState.didMove)handleStarClick(index);afterEditorChange();Celestial.redraw();if(e&&e.cancelable)e.preventDefault();}document.addEventListener(move,mH,{passive:false});document.addEventListener(up,uH,{passive:false});}
-var lastTouchTime=0,suppressNextOverlayClick=false;
-function bindDrawTouchInteractions(){var overlay=document.getElementById("draw-overlay");if(!overlay||overlay.__drawTouchBound)return;overlay.__drawTouchBound=true;overlay.addEventListener("touchend",function(ev){if(currentMode!=="draw"||(ev.touches&&ev.touches.length))return;var t=ev.changedTouches&&ev.changedTouches[0];if(!t)return;lastTouchTime=Date.now();if(ev.target&&ev.target.classList&&(ev.target.classList.contains("star-circle")||ev.target.classList.contains("edit-line")))return;if(dragState.didMove){dragState.didMove=false;return;}suppressNextOverlayClick=true;addStarAtEvent(t);ev.preventDefault();},{passive:false});}
+function startStarDrag(index,event,circleEl){var isTouch=event&&event.type&&event.type.indexOf("touch")===0,move=isTouch?"touchmove":"mousemove",up=isTouch?"touchend":"mouseup";if(isTouch)lastTouchTime=Date.now();dragState={active:true,starIndex:index,didMove:false};function mH(e){if(!dragState.active)return;dragState.didMove=true;if(isTouch)lastTouchTime=Date.now();updateDraggedStar(index,e,circleEl);if(e.cancelable)e.preventDefault();}function uH(e){if(isTouch)lastTouchTime=Date.now();dragState.active=false;document.removeEventListener(move,mH);document.removeEventListener(up,uH);if(!dragState.didMove){if(isTouch)handleStarTap(index);else handleStarClick(index);}afterEditorChange();Celestial.redraw();if(e&&e.cancelable)e.preventDefault();}document.addEventListener(move,mH,{passive:false});document.addEventListener(up,uH,{passive:false});}
+var lastTouchTime=0,suppressNextOverlayClick=false,lastStarTap={index:-1,time:0};
+function handleStarTap(index){var now=Date.now();if(lastStarTap.index===index&&now-lastStarTap.time<350){removeStarAt(index);selectedStarIndex=null;lastStarTap={index:-1,time:0};afterEditorChange();Celestial.redraw();return;}lastStarTap={index:index,time:now};handleStarClick(index);}
+function bindDrawTouchInteractions(){var overlay=document.getElementById("draw-overlay");if(!overlay||overlay.__drawTouchBound)return;overlay.__drawTouchBound=true;overlay.addEventListener("touchend",function(ev){if(currentMode!=="draw"||(ev.touches&&ev.touches.length))return;var t=ev.changedTouches&&ev.changedTouches[0];if(!t)return;lastTouchTime=Date.now();if(ev.target&&ev.target.classList&&ev.target.classList.contains("star-circle"))return;if(ev.target&&ev.target.classList&&ev.target.classList.contains("edit-line"))return;if(dragState.didMove){dragState.didMove=false;return;}suppressNextOverlayClick=true;addStarAtEvent(t);ev.preventDefault();},{passive:false});}
 d3.select("#draw-overlay").on("click",function(){if(currentMode!=="draw")return;var ev=d3.event;if(suppressNextOverlayClick||ignoreSyntheticMouse(ev)){suppressNextOverlayClick=false;return;}if(dragState.didMove){dragState.didMove=false;return;}if(ev.target&&ev.target.classList&&(ev.target.classList.contains("star-circle")||ev.target.classList.contains("edit-line")))return;addStarAtEvent(ev);});
 bindDrawTouchInteractions();
 document.getElementById("constellation-name").addEventListener("input",function(){editorState.name=this.value.trim();persistEditorDraft();});
