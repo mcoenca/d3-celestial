@@ -278,7 +278,8 @@ Celestial.display = function(config) {
   }
   
   // Zoom by factor; >1 larger <1 smaller. When a focal point is supplied,
-  // keep that screen position stable so touch pinch zooms target that area.
+  // keep that screen position stable while zoomed in. Once the map returns to
+  // its base scale, snap the projection back to the canonical centered view.
   function zoomBy(factor, point) {
     if (!factor || factor === 1) return;
     var sc0 = mapProjection.scale(),
@@ -290,10 +291,14 @@ Celestial.display = function(config) {
     if (sc1 < ext[0]) sc1 = ext[0];
     if (sc1 > ext[1]) sc1 = ext[1];
     factor = sc1 / sc0;
-    if (point && isNumber(point[0]) && isNumber(point[1]) && typeof mapProjection.translate === "function") {
-      tr = mapProjection.translate();
-      point = [point[0], point[1]];
-      tr = [point[0] - (point[0] - tr[0]) * factor, point[1] - (point[1] - tr[1]) * factor];
+    if (typeof mapProjection.translate === "function") {
+      if (Math.abs(sc1 - ext[0]) < 0.001) {
+        tr = [canvaswidth / 2, canvasheight / 2];
+      } else if (point && isNumber(point[0]) && isNumber(point[1])) {
+        tr = mapProjection.translate();
+        point = [point[0], point[1]];
+        tr = [point[0] - (point[0] - tr[0]) * factor, point[1] - (point[1] - tr[1]) * factor];
+      }
     }
     if (cfg.disableAnimations === true) { 
       mapProjection.scale(sc1);
