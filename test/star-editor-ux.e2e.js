@@ -138,6 +138,14 @@ async function main() {
     assert.ok(moved, "Le drag ne modifie pas la position visuelle de l'étoile");
     assert.strictEqual(await getStarCount(), 2, "Le compteur doit rester à 2 après drag");
 
+    // 2b) Tap mobile sur une ligne = suppression du segment, sans supprimer les étoiles.
+    await context.grantPermissions([], { origin: `http://${HOST}:${PORT}` }).catch(() => {});
+    await page.locator("#constellation-overlay .edit-line").first().tap();
+    await page.waitForTimeout(200);
+    const lineCountAfterTap = await page.locator("#constellation-overlay .edit-line").count();
+    assert.strictEqual(lineCountAfterTap, 0, "Le tap sur un trait doit supprimer la ligne");
+    assert.strictEqual(await getStarCount(), 2, "Le tap sur un trait ne doit pas supprimer les étoiles");
+
     // 3) Suppression par clic droit.
     await page.locator("#constellation-overlay .star-circle").nth(1).click({ button: "right" });
     await page.waitForTimeout(200);
@@ -165,6 +173,106 @@ async function main() {
       }
     });
     assert.ok(savedCount >= 1, "La constellation n'a pas été persistée dans localStorage");
+
+    // 6) Interactions tactiles mobiles : tap, drag, suppression de ligne, pinch zoom.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`http://${HOST}:${PORT}/demo/constellation-editor.html`, { waitUntil: "domcontentloaded" });
+    await page.waitForFunction(
+      () => !!document.querySelector("#constellation-overlay rect.overlay-hit"),
+      { timeout: 30000 }
+    );
+    await page.evaluate(() => localStorage.removeItem("customConstellations"));
+    await page.waitForTimeout(2000);
+
+    const tapAt = async (relX, relY) => {
+      const box = await overlay.boundingBox();
+      assert.ok(box, "Overlay mobile non mesurable");
+      await page.touchscreen.tap(box.x + box.width * relX, box.y + box.height * relY);
+      await page.waitForTimeout(150);
+    };
+
+    await tapAt(0.42, 0.52);
+    await tapAt(0.60, 0.46);
+    assert.strictEqual(await getStarCount(), 2, "Deux taps mobiles doivent ajouter deux étoiles");
+
+    const beforeTouchDrag = await page.evaluate(() => {
+      const c = document.querySelector("#constellation-overlay .star-circle");
+      return c ? { cx: Number(c.getAttribute("cx")), cy: Number(c.getAttribute("cy")) } : null;
+    });
+    assert.ok(beforeTouchDrag, "Aucune étoile à déplacer en tactile");
+
+    const touchGeom = await getOverlayGeometry();
+    const touchStart = {
+      x: touchGeom.left + beforeTouchDrag.cx * (touchGeom.width / touchGeom.svgWidth),
+      y: touchGeom.top + beforeTouchDrag.cy * (touchGeom.height / touchGeom.svgHeight)
+    };
+    await page.dispatchEvent("#constellation-overlay .star-circle", "touchstart", {
+      touches: [{ identifier: 1, clientX: touchStart.x, clientY: touchStart.y }],
+      changedTouches: [{ identifier: 1, clientX: touchStart.x, clientY: touchStart.y }]
+    });
+    await page.dispatchEvent("body", "touchmove", {
+      touches: [{ identifier: 1, clientX: touchStart.x + 32, clientY: touchStart.y + 24 }],
+      changedTouches: [{ identifier: 1, clientX: touchStart.x + 32, clientY: touchStart.y + 24 }]
+    });
+    await page.dispatchEvent("body", "touchend", {
+      touches: [],
+      changedTouches: [{ identifier: 1, clientX: touchStart.x + 32, clientY: touchStart.y + 24 }]
+    });
+    await page.waitForTimeout(200);
+    const afterTouchDrag = await page.evaluate(() => {
+      const c = document.querySelector("#constellation-overlay .star-circle");
+      return c ? { cx: Number(c.getAttribute("cx")), cy: Number(c.getAttribute("cy")) } : null;
+    });
+    assert.ok(afterTouchDrag, "Étoile absente après drag tactile");
+    assert.ok(
+      Math.abs(afterTouchDrag.cx - beforeTouchDrag.cx) > 3 || Math.abs(afterTouchDrag.cy - beforeTouchDrag.cy) > 3,
+      "Le drag tactile doit déplacer l'étoile"
+    );
+    assert.strictEqual(await getStarCount(), 2, "Le drag tactile ne doit pas ajouter d'étoile");
+
+    const lineCountBefore = await page.locator("#constellation-overlay .edit-line").count();
+    assert.ok(lineCountBefore >= 1, "Une ligne doit exister avant suppression tactile");
+    const lineBox = await page.locator("#constellation-overlay .edit-line").first().boundingBox();
+    assert.ok(lineBox, "Ligne non mesurable");
+    await page.touchscreen.tap(lineBox.x + lineBox.width / 2, lineBox.y + lineBox.height / 2);
+    await page.waitForTimeout(200);
+    assert.strictEqual(await page.locator("#constellation-overlay .edit-line").count(), 0, "Le tap sur une ligne doit la supprimer");
+
+    const zoomBefore = await page.locator("#zoom-level-display").textContent();
+    const boxForPinch = await overlay.boundingBox();
+    assert.ok(boxForPinch, "Overlay mobile non mesurable pour pinch");
+    const cx = boxForPinch.x + boxForPinch.width / 2;
+    const cy = boxForPinch.y + boxForPinch.height / 2;
+    await page.dispatchEvent("#constellation-overlay", "touchstart", {
+      touches: [
+        { identifier: 1, clientX: cx - 20, clientY: cy },
+        { identifier: 2, clientX: cx + 20, clientY: cy }
+      ],
+      changedTouches: [
+        { identifier: 1, clientX: cx - 20, clientY: cy },
+        { identifier: 2, clientX: cx + 20, clientY: cy }
+      ]
+    });
+    await page.dispatchEvent("#constellation-overlay", "touchmove", {
+      touches: [
+        { identifier: 1, clientX: cx - 45, clientY: cy },
+        { identifier: 2, clientX: cx + 45, clientY: cy }
+      ],
+      changedTouches: [
+        { identifier: 1, clientX: cx - 45, clientY: cy },
+        { identifier: 2, clientX: cx + 45, clientY: cy }
+      ]
+    });
+    await page.dispatchEvent("#constellation-overlay", "touchend", {
+      touches: [],
+      changedTouches: [
+        { identifier: 1, clientX: cx - 45, clientY: cy },
+        { identifier: 2, clientX: cx + 45, clientY: cy }
+      ]
+    });
+    await page.waitForTimeout(150);
+    const zoomAfter = await page.locator("#zoom-level-display").textContent();
+    assert.notStrictEqual(zoomAfter, zoomBefore, "Le pinch tactile doit modifier le zoom");
 
     // 5) Export JSON.
     const downloadPromise = page.waitForEvent("download", { timeout: 10000 });
