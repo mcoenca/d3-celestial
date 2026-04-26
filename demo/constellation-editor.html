@@ -300,7 +300,7 @@
       #editor-toolbar label { width: 100%; align-items: flex-start; flex-direction: column; }
       #editor-toolbar input[type="text"] { width: 100%; }
       #celestial-map-wrapper { width: 100%; display: block; }
-      #constellation-overlay .edit-line { stroke-width: 8; opacity: 0.75; }
+      #constellation-overlay .edit-line { stroke-width: 2.5; opacity: 0.9; }
       #zoom-controls { bottom: 8px; right: 8px; padding: 6px 8px; }
       #zoom-controls button { width: 36px; height: 36px; font-size: 20px; }
       #zoom-level-display { min-width: 50px; font-size: 12px; }
@@ -411,6 +411,10 @@
   var dragState = { active: false, starIndex: -1, didMove: false };
   // Prévisualisation d'un candidat de recherche : coords du candidat (même ordre que stars) ou null
   var previewCandidateCoords = null;
+
+  function isMobileViewport() {
+    return window.matchMedia && window.matchMedia("(max-width: 768px)").matches;
+  }
 
   function angleBetweenVectorsDeg(v1, v2) {
     var d = v1[0] * v2[0] + v1[1] * v2[1];
@@ -701,6 +705,43 @@
       maxAngleDiff = Math.max.apply(null, angleDiffs);
       if (maxAngleDiff < 1e-6) maxAngleDiff = 1;
     }
+    var lineHits = g.selectAll("line.edit-line-hit").data(links, function(d) { return d[0] + "-" + d[1]; });
+    lineHits.exit().remove();
+    lineHits.enter()
+      .append("line")
+      .attr("class", "edit-line-hit")
+      .style("stroke", "transparent")
+      .style("stroke-width", isMobileViewport() ? 26 : 14)
+      .style("pointer-events", "stroke")
+      .style("cursor", "pointer")
+      .on("click", function(d) {
+        d3.event.stopPropagation();
+        d3.event.preventDefault();
+        removeLink(d);
+      })
+      .on("touchend", function(d) {
+        lastTouchTime = Date.now();
+        d3.event.stopPropagation();
+        d3.event.preventDefault();
+        removeLink(d);
+      });
+    g.selectAll("line.edit-line-hit")
+      .attr("x1", function(d) {
+        var p = Celestial.mapProjection(editorState.stars[d[0]]);
+        return p ? p[0] : 0;
+      })
+      .attr("y1", function(d) {
+        var p = Celestial.mapProjection(editorState.stars[d[0]]);
+        return p ? p[1] : 0;
+      })
+      .attr("x2", function(d) {
+        var p = Celestial.mapProjection(editorState.stars[d[1]]);
+        return p ? p[0] : 0;
+      })
+      .attr("y2", function(d) {
+        var p = Celestial.mapProjection(editorState.stars[d[1]]);
+        return p ? p[1] : 0;
+      });
     var lines = g.selectAll("line.edit-line").data(links, function(d) { return d[0] + "-" + d[1]; });
     lines.exit().remove();
     lines.enter()
@@ -714,6 +755,7 @@
         removeLink(d);
       })
       .on("touchend", function(d) {
+        lastTouchTime = Date.now();
         d3.event.stopPropagation();
         d3.event.preventDefault();
         removeLink(d);
@@ -837,6 +879,40 @@
         .text("Nombres = \u00e9cart d'angle au sommet (r\u00e9f. vs trouv\u00e9e), en \u00b0");
     }
 
+    var starHits = g.selectAll(".star-hit")
+      .data(editorState.stars, function(d, i) { return i; });
+    starHits.exit().remove();
+    starHits.enter()
+      .append("circle")
+      .attr("class", "star-hit")
+      .style("fill", "transparent")
+      .style("pointer-events", "all")
+      .style("cursor", "move")
+      .on("mousedown", function(d, i) {
+        var ev = d3.event;
+        if (ignoreSyntheticMouse(ev)) return;
+        ev.stopPropagation();
+        ev.preventDefault();
+        startStarDrag(i, ev, this);
+      })
+      .on("touchstart", function(d, i) {
+        var ev = d3.event;
+        lastTouchTime = Date.now();
+        ev.stopPropagation();
+        ev.preventDefault();
+        startStarDrag(i, ev, this);
+      });
+    g.selectAll(".star-hit")
+      .attr("r", function() { return isMobileViewport() ? 22 : 14; })
+      .attr("cx", function(d) {
+        var p = Celestial.mapProjection(d);
+        return p ? p[0] : 0;
+      })
+      .attr("cy", function(d) {
+        var p = Celestial.mapProjection(d);
+        return p ? p[1] : 0;
+      });
+
     var stars = g.selectAll(".star-circle")
       .data(editorState.stars, function(d, i) { return i; });
     stars.exit().remove();
@@ -875,6 +951,9 @@
         removeStarAtIndex(i);
         Celestial.redraw();
       });
+    g.selectAll(".star-hit").each(function() {
+      this.parentNode.appendChild(this);
+    });
     g.selectAll(".star-circle").each(function() {
       this.parentNode.appendChild(this);
     });

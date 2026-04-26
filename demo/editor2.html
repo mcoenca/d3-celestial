@@ -483,7 +483,7 @@ function getPreviewCoords(){return previewResultIndex>=0&&previewResultIndex<sea
 function persistEditorDraft(){
   try{ensureIconPlacement();localStorage.setItem(DRAFT_STORAGE_KEY,JSON.stringify({name:editorState.name,stars:editorState.stars,links:editorState.links,image:editorState.image,orientation:editorState.orientation,iconColor:editorState.iconColor,iconPlacement:editorState.iconPlacement}));}catch(e){}
 }
-function afterEditorChange(){previewResultIndex=-1;ensureIconPlacement();persistEditorDraft();updateSearchOpsEstimate();}
+function afterEditorChange(){previewResultIndex=-1;ensureIconPlacement();persistEditorDraft();scheduleSearchOpsEstimate();}
 function restoreEditorDraft(){
   try{var raw=localStorage.getItem(DRAFT_STORAGE_KEY);if(!raw)return;var d=JSON.parse(raw);if(!d||!Array.isArray(d.stars)||!Array.isArray(d.links))return;editorState.name=d.name||"";editorState.stars=d.stars.map(clonePoint);editorState.links=d.links.slice();editorState.image=d.image||null;editorState.orientation=d.orientation==null?null:d.orientation;editorState.iconColor=d.iconColor||"#ffffff";editorState.iconPlacement=d.iconPlacement||null;var n=document.getElementById("constellation-name");if(n)n.value=editorState.name;var c=document.getElementById("icon-color");if(c)c.value=editorState.iconColor;var o=document.getElementById("icon-orientation");if(o)o.value=editorState.iconPlacement&&editorState.iconPlacement.rotation!=null?Math.round(editorState.iconPlacement.rotation):((editorState.orientation==null)?0:Math.round(editorState.orientation));}catch(e){}
 }
@@ -495,15 +495,17 @@ function loadSearchCatalog(cb){
   searchCatalogLoading=true;
   fetch((drawConfig.datapath||"../data/")+"stars.6.json").then(function(r){return r.json();}).then(function(json){searchCatalogCache=(json.features||[]).filter(function(f){return f.properties&&f.properties.mag<=6&&f.geometry&&f.geometry.coordinates;}).map(function(f){return{coords:f.geometry.coordinates.slice(),mag:f.properties.mag};});searchCatalogLoading=false;cb(searchCatalogCache);}).catch(function(){searchCatalogLoading=false;cb(null);});
 }
-function estimatePairCount(starList,dMin,dMax){var n=0;for(var i=0;i<starList.length;i++)for(var j=i+1;j<starList.length;j++){var a=starList[i].coords,b=starList[j].coords,d=angularDistanceDeg(a[0],a[1],b[0],b[1]);if(d>=dMin&&d<=dMax)n++;}return n;}
+var estimateTimer=null,estimateSeq=0,PAIR_ESTIMATE_SAMPLE=60000;
+function estimatePairCountFast(starList,dMin,dMax){var n=starList.length,total=n*(n-1)/2;if(total<=PAIR_ESTIMATE_SAMPLE)return estimatePairCountExact(starList,dMin,dMax);var hits=0,samples=Math.min(PAIR_ESTIMATE_SAMPLE,total),seed=(Math.round(dMin*1000)*73856093^Math.round(dMax*1000)*19349663)>>>0;function rnd(){seed=(1664525*seed+1013904223)>>>0;return seed/4294967296;}for(var s=0;s<samples;s++){var i=Math.floor(rnd()*n),j=Math.floor(rnd()*(n-1));if(j>=i)j++;var a=starList[i].coords,b=starList[j].coords,d=angularDistanceDeg(a[0],a[1],b[0],b[1]);if(d>=dMin&&d<=dMax)hits++;}return Math.round(total*hits/samples);}
+function estimatePairCountExact(starList,dMin,dMax){var n=0;for(var i=0;i<starList.length;i++)for(var j=i+1;j<starList.length;j++){var a=starList[i].coords,b=starList[j].coords,d=angularDistanceDeg(a[0],a[1],b[0],b[1]);if(d>=dMin&&d<=dMax)n++;}return n;}
+function scheduleSearchOpsEstimate(){if(estimateTimer)clearTimeout(estimateTimer);estimateTimer=setTimeout(updateSearchOpsEstimate,180);}
 function updateSearchOpsEstimate(){
   var el=document.getElementById("match-ops-estimate");if(!el)return;var links=getValidLinks();if(editorState.stars.length<2||!links.length){el.textContent="Estimation : tracez au moins un segment.";return;}
   var ref=links[0],refEdgeDeg=angularDistanceDeg(editorState.stars[ref[0]][0],editorState.stars[ref[0]][1],editorState.stars[ref[1]][0],editorState.stars[ref[1]][1]);
   var scaleMin=getScaleMin(),scaleMax=getScaleMax();if(scaleMax<scaleMin){var t=scaleMin;scaleMin=scaleMax;scaleMax=t;}
   var dMin=Math.max(0.05,refEdgeDeg*scaleMin),dMax=refEdgeDeg*scaleMax,checks=Math.max(0,editorState.stars.length-2);
-  el.textContent="Estimation : calcul du catalogue...";
-  if(pendingEstimateUpdate)return;pendingEstimateUpdate=true;
-  loadSearchCatalog(function(list){pendingEstimateUpdate=false;if(!list){el.textContent="Estimation indisponible (catalogue non chargé).";return;}var pairs=estimatePairCount(list,dMin,dMax);var ops=pairs*2*Math.max(1,checks);el.textContent="Estimation : "+pairs.toLocaleString("fr-FR")+" paires, ~"+ops.toLocaleString("fr-FR")+" opérations (échelle ×"+scaleMin.toFixed(1)+"–×"+scaleMax.toFixed(1)+", tol. "+getMatchTol().toFixed(1)+"°).";});
+  var seq=++estimateSeq;el.textContent="Estimation : calcul rapide...";
+  loadSearchCatalog(function(list){if(seq!==estimateSeq)return;if(!list){el.textContent="Estimation indisponible (catalogue non chargé).";return;}setTimeout(function(){if(seq!==estimateSeq)return;var pairs=estimatePairCountFast(list,dMin,dMax);var ops=pairs*2*Math.max(1,checks);el.textContent="Estimation : ~"+pairs.toLocaleString("fr-FR")+" paires, ~"+ops.toLocaleString("fr-FR")+" opérations (échelle ×"+scaleMin.toFixed(1)+"–×"+scaleMax.toFixed(1)+", tol. "+getMatchTol().toFixed(1)+"°).";},0);});
 }
 
 function switchToDrawMode() {
@@ -590,17 +592,41 @@ function updateDrawOverlay() {
   g.selectAll("rect.overlay-hit").data([null]).enter().append("rect").attr("class","overlay-hit");
   g.select("rect.overlay-hit").attr("width",w).attr("height",h).attr("x",0).attr("y",0).style("pointer-events","all");
   var links=editorState.links.filter(function(e){return e[0]>=0&&e[0]<editorState.stars.length&&e[1]>=0&&e[1]<editorState.stars.length&&e[0]!==e[1];});
+  var hitLines=g.selectAll("line.edit-line-hit").data(links,function(d){return d[0]+"-"+d[1];});
+  hitLines.exit().remove();
+  hitLines.enter().append("line").attr("class","edit-line-hit")
+    .style("stroke","transparent").style("stroke-width",isMobileViewport()?26:14).style("pointer-events","stroke").style("cursor","pointer")
+    .on("click",function(d){d3.event.stopPropagation();d3.event.preventDefault();removeLink(d);})
+    .on("touchend",function(d){lastTouchTime=Date.now();d3.event.stopPropagation();d3.event.preventDefault();removeLink(d);});
+  g.selectAll("line.edit-line-hit")
+    .attr("x1",function(d){var p=Celestial.mapProjection(editorState.stars[d[0]]);return p?p[0]:0;})
+    .attr("y1",function(d){var p=Celestial.mapProjection(editorState.stars[d[0]]);return p?p[1]:0;})
+    .attr("x2",function(d){var p=Celestial.mapProjection(editorState.stars[d[1]]);return p?p[0]:0;})
+    .attr("y2",function(d){var p=Celestial.mapProjection(editorState.stars[d[1]]);return p?p[1]:0;});
   var lines=g.selectAll("line.edit-line").data(links,function(d){return d[0]+"-"+d[1];});
   lines.exit().remove();
-  lines.enter().append("line").attr("class","edit-line").on("click",function(d){d3.event.stopPropagation();d3.event.preventDefault();removeLink(d);}).on("touchend",function(d){d3.event.stopPropagation();d3.event.preventDefault();removeLink(d);});
+  lines.enter().append("line").attr("class","edit-line")
+    .on("click",function(d){d3.event.stopPropagation();d3.event.preventDefault();removeLink(d);})
+    .on("touchend",function(d){lastTouchTime=Date.now();d3.event.stopPropagation();d3.event.preventDefault();removeLink(d);});
   g.selectAll("line.edit-line")
     .attr("x1",function(d){var p=Celestial.mapProjection(editorState.stars[d[0]]);return p?p[0]:0;})
     .attr("y1",function(d){var p=Celestial.mapProjection(editorState.stars[d[0]]);return p?p[1]:0;})
     .attr("x2",function(d){var p=Celestial.mapProjection(editorState.stars[d[1]]);return p?p[0]:0;})
     .attr("y2",function(d){var p=Celestial.mapProjection(editorState.stars[d[1]]);return p?p[1]:0;});
+  g.selectAll("line.edit-line-hit").each(function(){this.parentNode.appendChild(this);});
   g.selectAll("line.preview-line").remove();g.selectAll("circle.preview-circle").remove();
   var preview=getPreviewCoords();
   if(preview&&preview.length===editorState.stars.length){var ppts=preview.map(function(c){return Celestial.mapProjection(c);});if(!ppts.some(function(p){return !p||isNaN(p[0]);})){g.selectAll("line.preview-line").data(links).enter().append("line").attr("class","preview-line").style("stroke","#22d3ee").style("stroke-width",2).style("stroke-dasharray","5,3").style("pointer-events","none").attr("x1",function(d){return ppts[d[0]][0];}).attr("y1",function(d){return ppts[d[0]][1];}).attr("x2",function(d){return ppts[d[1]][0];}).attr("y2",function(d){return ppts[d[1]][1];});g.selectAll("circle.preview-circle").data(ppts).enter().append("circle").attr("class","preview-circle").style("fill","#22d3ee").style("opacity",0.85).style("pointer-events","none").attr("r",5).attr("cx",function(d){return d[0];}).attr("cy",function(d){return d[1];});}}
+  var starHits=g.selectAll(".star-hit").data(editorState.stars,function(d,i){return i;});
+  starHits.exit().remove();
+  starHits.enter().append("circle").attr("class","star-hit")
+    .style("fill","transparent").style("pointer-events","all").style("cursor","move")
+    .on("mousedown",function(d,i){var ev=d3.event;if(ignoreSyntheticMouse(ev))return;ev.stopPropagation();ev.preventDefault();startStarDrag(i,ev,g.selectAll(".star-circle").filter(function(dd,ii){return ii===i;}).node()||this);})
+    .on("touchstart",function(d,i){var ev=d3.event;lastTouchTime=Date.now();ev.stopPropagation();ev.preventDefault();startStarDrag(i,ev,g.selectAll(".star-circle").filter(function(dd,ii){return ii===i;}).node()||this);});
+  g.selectAll(".star-hit")
+    .attr("r",function(){return isMobileViewport()?22:14;})
+    .attr("cx",function(d){var p=Celestial.mapProjection(d);return p?p[0]:0;})
+    .attr("cy",function(d){var p=Celestial.mapProjection(d);return p?p[1]:0;});
   var stars=g.selectAll(".star-circle").data(editorState.stars,function(d,i){return i;});
   stars.exit().remove();
   stars.enter().append("circle").attr("class","star-circle");
@@ -612,6 +638,7 @@ function updateDrawOverlay() {
     .on("mousedown",function(d,i){var ev=d3.event;if(ignoreSyntheticMouse(ev))return;ev.stopPropagation();ev.preventDefault();startStarDrag(i,ev,this);})
     .on("touchstart",function(d,i){var ev=d3.event;lastTouchTime=Date.now();ev.stopPropagation();ev.preventDefault();startStarDrag(i,ev,this);})
     .on("contextmenu",function(d,i){d3.event.preventDefault();removeStarAt(i);afterEditorChange();Celestial.redraw();});
+  g.selectAll(".star-hit").each(function(){this.parentNode.appendChild(this);});
   g.selectAll(".star-circle").each(function(){this.parentNode.appendChild(this);});
   function rl(grp){var ll=editorState.links.filter(function(e){return e[0]>=0&&e[0]<editorState.stars.length&&e[1]>=0&&e[1]<editorState.stars.length&&e[0]!==e[1];});grp.selectAll("line.edit-line").data(ll,function(d){return d[0]+"-"+d[1];}).attr("x1",function(d){var p=Celestial.mapProjection(editorState.stars[d[0]]);return p?p[0]:0;}).attr("y1",function(d){var p=Celestial.mapProjection(editorState.stars[d[0]]);return p?p[1]:0;}).attr("x2",function(d){var p=Celestial.mapProjection(editorState.stars[d[1]]);return p?p[0]:0;}).attr("y2",function(d){var p=Celestial.mapProjection(editorState.stars[d[1]]);return p?p[1]:0;});}
   document.getElementById("star-count").textContent=editorState.stars.length;
@@ -647,7 +674,7 @@ document.getElementById("btn-remove-icon").addEventListener("click",function(){e
 restoreEditorDraft();
 updateEditorBackgroundImage();
 updateIconLabel();
-setTimeout(updateSearchOpsEstimate,800);
+setTimeout(scheduleSearchOpsEstimate,800);
 setTimeout(function(){document.getElementById("btn-icon-search").click();},600);
 
 /* ========================================================================
@@ -724,9 +751,9 @@ searchResults=top.map(function(c){var coords=c.starIndices.map(function(i){retur
 batchProc();}).catch(function(err){btn.disabled=false;prog.style.display="none";alert("Erreur: "+(err.message||err));});}
 document.getElementById("btn-match-search").addEventListener("click",runShapeSearch);
 document.getElementById("top-k-slider").addEventListener("input",function(){document.getElementById("top-k-value").textContent=this.value;});
-document.getElementById("match-tol-slider").addEventListener("input",function(){document.getElementById("match-tol-value").textContent=parseFloat(this.value).toFixed(1)+"°";updateSearchOpsEstimate();});
-document.getElementById("scale-min-input").addEventListener("input",updateSearchOpsEstimate);
-document.getElementById("scale-max-input").addEventListener("input",updateSearchOpsEstimate);
+document.getElementById("match-tol-slider").addEventListener("input",function(){document.getElementById("match-tol-value").textContent=parseFloat(this.value).toFixed(1)+"°";scheduleSearchOpsEstimate();});
+document.getElementById("scale-min-input").addEventListener("input",scheduleSearchOpsEstimate);
+document.getElementById("scale-max-input").addEventListener("input",scheduleSearchOpsEstimate);
 document.getElementById("size-weight-slider").addEventListener("input",function(){document.getElementById("size-weight-value").textContent=parseFloat(this.value).toFixed(2);});
 
 function renderDrawResults(){var div=document.getElementById("match-results");if(!searchResults.length){div.innerHTML="<p style='color:#94a3b8;font-size:12px;text-align:center;'>Aucune correspondance.</p>";return;}var html="";searchResults.forEach(function(r,i){var sc="RMS "+(r.rms*60).toFixed(1)+"′";var ratioStr="×"+r.ratio.toFixed(2);if(r.maxAngleDiff!=null)sc+=" · Δ° "+r.maxAngleDiff.toFixed(1);if(r.rmsRatios!=null)sc+=" · rat "+r.rmsRatios.toFixed(3);var ratioColor=Math.abs(r.ratio-1)<0.3?"#22c55e":(Math.abs(r.ratio-1)<1?"#f97316":"#ef4444");var vc=r.visibility==="visible"?"#22c55e":(r.visibility==="invisible"?"#ef4444":"#f97316");var vl=r.visibility==="visible"?"Visible":(r.visibility==="invisible"?"Invisible":"Partiel");html+="<div class='result-item"+(i===selectedResultIndex?" highlighted":"")+"'><span class='score'>#"+(i+1)+" — "+sc+"</span> <span style='color:"+ratioColor+";font-size:11px;font-weight:600;'>"+ratioStr+"</span><br><span style='display:inline-flex;align-items:center;gap:4px;margin-top:2px;'><span style='display:inline-block;width:7px;height:7px;border-radius:50%;background:"+vc+";'></span><span style='font-size:11px;color:"+vc+";'>"+vl+" Paris</span></span><br><button type='button' class='btn secondary' data-sel='"+i+"' style='margin-right:4px;'>Sélectionner</button><button type='button' class='btn secondary' data-app='"+i+"'>Appliquer</button></div>";});div.innerHTML=html;div.querySelectorAll("button[data-sel]").forEach(function(bt){bt.addEventListener("click",function(){selectPreviewResult(parseInt(bt.getAttribute("data-sel"),10));});});div.querySelectorAll("button[data-app]").forEach(function(bt){bt.addEventListener("click",function(){applyResult(parseInt(bt.getAttribute("data-app"),10));});});}
