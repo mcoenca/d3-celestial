@@ -66,10 +66,36 @@
       background: #1a1a24; color: #e0e0e0; width: 160px;
     }
     .star-count { color: #94a3b8; font-size: 12px; }
+    #quick-controls {
+      display: flex; flex-wrap: wrap; align-items: stretch; gap: 8px;
+      margin: 10px 0 12px; padding: 10px;
+      background: #151520; border-radius: 8px; border: 1px solid #2a2a3a;
+    }
+    .stepper {
+      display: flex; align-items: center; gap: 6px; flex: 1 1 180px;
+      padding: 6px; background: #101018; border: 1px solid #252536; border-radius: 8px;
+    }
+    .stepper-label { color: #94a3b8; font-size: 12px; font-weight: 600; min-width: 58px; }
+    .stepper button {
+      width: 38px; height: 38px; border: 1px solid #3a3a4a; border-radius: 8px;
+      background: #1f2937; color: #fff; font-size: 22px; line-height: 1;
+      cursor: pointer; touch-action: manipulation;
+    }
+    .stepper button:active { transform: translateY(1px); background: #374151; }
+    .stepper input {
+      width: 62px; padding: 7px 5px; border: 1px solid #3a3a4a; border-radius: 6px;
+      background: #1a1a24; color: #e0e0e0; text-align: center; font-size: 13px;
+    }
+    .stepper-unit { color: #94a3b8; font-size: 12px; min-width: 12px; }
     #image-panel {
       margin-bottom: 12px; padding: 10px;
       background: #151520; border-radius: 8px; border: 1px solid #2a2a3a;
     }
+    #image-panel-header {
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      margin-bottom: 8px;
+    }
+    #icon-selector-body.collapsed { display: none; }
     .icon-grid {
       display: grid; grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
       gap: 6px; max-height: 160px; overflow-y: auto;
@@ -180,8 +206,20 @@
       #draw-left { width: 100%; }
       #draw-left h2 { font-size: 15px; }
       .info-line { font-size: 11px; }
-      #editor-toolbar { gap: 6px; padding: 8px; }
-      #editor-toolbar input[type="text"] { width: 120px; }
+      #editor-toolbar { gap: 6px; padding: 8px; margin-bottom: 8px; }
+      #editor-toolbar label { flex: 1 1 100%; }
+      #editor-toolbar input[type="text"] { width: 100%; min-height: 40px; font-size: 15px; }
+      #editor-toolbar .btn { flex: 1 1 45%; min-height: 42px; }
+      #btn-export { display: none; }
+      #quick-controls { gap: 6px; padding: 8px; margin: 8px 0; }
+      .stepper { flex: 1 1 100%; padding: 5px; }
+      .stepper button { width: 46px; height: 46px; font-size: 26px; }
+      .stepper input { flex: 1; min-width: 76px; height: 42px; font-size: 16px; }
+      .stepper-label { min-width: 62px; }
+      #image-panel { padding: 8px; margin-bottom: 10px; }
+      #icon-selector-body > div:first-child { gap: 6px !important; }
+      #icon-search { flex: 1 1 150px; min-height: 40px; font-size: 15px !important; }
+      #btn-icon-search, #btn-download-icon, #btn-remove-icon, #btn-toggle-icon-panel { min-height: 40px; }
       #draw-map-wrapper { width: 100%; display: block; }
       #draw-overlay .edit-line { stroke-width: 2.5; opacity: 0.9; }
       #zoom-controls { bottom: 8px; right: 8px; padding: 6px 8px; }
@@ -216,27 +254,6 @@
       <div class="info-line">
         Clic vide = ajouter · Clic étoile = sélectionner · Clic 2e = relier · Clic trait = supprimer · Glisser = déplacer · Clic droit = supprimer.
       </div>
-      <div id="editor-toolbar">
-        <label>Nom <input type="text" id="constellation-name" placeholder="Ex: Mon triangle" /></label>
-        <span class="star-count">Étoiles : <strong id="star-count">0</strong></span>
-        <button type="button" class="btn secondary" id="btn-remove-star">Supprimer dernière</button>
-        <button type="button" class="btn primary" id="btn-save">Sauvegarder</button>
-        <button type="button" class="btn secondary" id="btn-export">Exporter JSON</button>
-      </div>
-      <div id="image-panel">
-        <div style="font-weight:600; margin-bottom:6px; font-size:13px;">Image de fond (icône)</div>
-        <div style="display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-bottom:8px;">
-          <input type="text" id="icon-search" placeholder="Ex: animal, lion" style="padding:5px 8px; border:1px solid #3a3a4a; border-radius:4px; background:#1a1a24; color:#e0e0e0; width:150px; font-size:12px;" />
-          <button type="button" class="btn secondary" id="btn-icon-search">Chercher</button>
-          <label style="display:flex;align-items:center;gap:4px;color:#94a3b8;font-size:12px;">Couleur <input type="color" id="icon-color" value="#ffffff" style="width:28px;height:24px;padding:0;border:1px solid #3a3a4a;border-radius:4px;cursor:pointer;background:#1a1a24;" /></label>
-          <label style="display:flex;align-items:center;gap:4px;color:#94a3b8;font-size:12px;">Échelle <input type="number" id="icon-scale" min="0.1" max="10" step="0.1" value="1.5" title="Taille de l'icône en multiple du premier segment" style="width:50px;padding:3px 5px;border:1px solid #3a3a4a;border-radius:4px;background:#1a1a24;color:#e0e0e0;font-size:12px;" />×</label>
-          <label style="display:flex;align-items:center;gap:4px;color:#94a3b8;font-size:12px;">Incl. <input type="number" id="icon-orientation" min="-180" max="180" step="15" value="0" title="Inclinaison relative au premier segment" style="width:50px;padding:3px 5px;border:1px solid #3a3a4a;border-radius:4px;background:#1a1a24;color:#e0e0e0;font-size:12px;" />°</label>
-          <button type="button" class="btn secondary" id="btn-download-icon">DL</button>
-          <button type="button" class="btn secondary" id="btn-remove-icon">Retirer</button>
-          <span id="icon-selected-label" style="color:#94a3b8;font-size:12px;"></span>
-        </div>
-        <div id="icon-grid" class="icon-grid"></div>
-      </div>
       <!-- The single shared Celestial container lives here in draw mode -->
       <div id="draw-map-wrapper">
         <div id="celestial-map"></div>
@@ -245,6 +262,48 @@
           <button type="button" id="btn-zoom-out" title="Zoom −">−</button>
           <span id="zoom-level-display">×6.6</span>
           <button type="button" id="btn-zoom-in" title="Zoom +">+</button>
+        </div>
+      </div>
+      <div id="editor-toolbar">
+        <label>Nom <input type="text" id="constellation-name" placeholder="Ex: Mon triangle" /></label>
+        <span class="star-count">Étoiles : <strong id="star-count">0</strong></span>
+        <button type="button" class="btn secondary" id="btn-remove-star">Supprimer dernière</button>
+        <button type="button" class="btn primary" id="btn-save">Sauvegarder</button>
+        <button type="button" class="btn secondary" id="btn-export">Exporter JSON</button>
+      </div>
+      <div id="quick-controls">
+        <div class="stepper">
+          <span class="stepper-label">Échelle</span>
+          <button type="button" id="btn-icon-scale-down" aria-label="Diminuer l'échelle">−</button>
+          <input type="number" id="icon-scale" min="0.1" max="10" step="0.1" value="1.5" title="Taille de l'icône en multiple du premier segment" />
+          <button type="button" id="btn-icon-scale-up" aria-label="Augmenter l'échelle">+</button>
+          <span class="stepper-unit">×</span>
+        </div>
+        <div class="stepper">
+          <span class="stepper-label">Incl.</span>
+          <button type="button" id="btn-icon-rotation-down" aria-label="Diminuer l'inclinaison">−</button>
+          <input type="number" id="icon-orientation" min="-180" max="180" step="15" value="0" title="Inclinaison relative au premier segment" />
+          <button type="button" id="btn-icon-rotation-up" aria-label="Augmenter l'inclinaison">+</button>
+          <span class="stepper-unit">°</span>
+        </div>
+      </div>
+      <div id="image-panel">
+        <div id="image-panel-header">
+          <div>
+            <div style="font-weight:600;font-size:13px;">Sélecteur d'icône</div>
+            <span id="icon-selected-label" style="color:#94a3b8;font-size:12px;"></span>
+          </div>
+          <button type="button" class="btn secondary" id="btn-toggle-icon-panel">Masquer</button>
+        </div>
+        <div id="icon-selector-body">
+          <div style="display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-bottom:8px;">
+            <input type="text" id="icon-search" placeholder="Ex: animal, lion" style="padding:5px 8px; border:1px solid #3a3a4a; border-radius:4px; background:#1a1a24; color:#e0e0e0; width:150px; font-size:12px;" />
+            <button type="button" class="btn secondary" id="btn-icon-search">Chercher</button>
+            <label style="display:flex;align-items:center;gap:4px;color:#94a3b8;font-size:12px;">Couleur <input type="color" id="icon-color" value="#ffffff" style="width:28px;height:24px;padding:0;border:1px solid #3a3a4a;border-radius:4px;cursor:pointer;background:#1a1a24;" /></label>
+            <button type="button" class="btn secondary" id="btn-download-icon">DL</button>
+            <button type="button" class="btn secondary" id="btn-remove-icon">Retirer</button>
+          </div>
+          <div id="icon-grid" class="icon-grid"></div>
         </div>
       </div>
       <div id="saved-section">
@@ -670,10 +729,17 @@ document.getElementById("btn-remove-star").addEventListener("click",function(){i
    ======================================================================== */
 function iconifySvgUrl(id){if(!id||id.indexOf(":")===-1)return null;var p=id.split(":");return "https://api.iconify.design/"+p[0]+"/"+p[1]+".svg";}
 function searchIconify(q,cb){fetch("https://api.iconify.design/search?query="+encodeURIComponent(q||"animal")+"&limit=48").then(function(r){return r.json();}).then(function(d){cb(d.icons||[]);}).catch(function(){cb([]);});}
-function updateIconLabel(){var el=document.getElementById("icon-selected-label");if(el)el.textContent=editorState.image?"Image définie":"";}
+function updateIconLabel(){var el=document.getElementById("icon-selected-label");if(el)el.textContent=editorState.image?"Image définie":"";var body=document.getElementById("icon-selector-body"),btn=document.getElementById("btn-toggle-icon-panel");if(editorState.image&&body&&!body.classList.contains("collapsed")){body.classList.add("collapsed");if(btn)btn.textContent="Choisir icône";}}
+function applyIconScaleValue(value){var el=document.getElementById("icon-scale");if(el)el.value=Math.max(0.1,Math.min(10,value)).toFixed(1);ensureIconPlacement();if(editorState.iconPlacement)editorState.iconPlacement.size=parseIconScale();persistEditorDraft();if(currentMode==="draw")Celestial.redraw();}
+function applyIconRotationValue(value){var el=document.getElementById("icon-orientation");if(el)el.value=Math.round(normalizeAngleDeg(value));editorState.orientation=parseIconRotation();ensureIconPlacement();if(editorState.iconPlacement)editorState.iconPlacement.rotation=parseIconRotation();persistEditorDraft();if(currentMode==="draw")Celestial.redraw();}
 document.getElementById("icon-color").addEventListener("input",function(){editorState.iconColor=this.value||"#ffffff";persistEditorDraft();updateEditorBackgroundImage();document.querySelectorAll("#icon-grid img").forEach(function(img){if(img.src&&img.src.indexOf("api.iconify.design")!==-1)img.src=iconifyUrlWithColor(img.src.split("?")[0],editorState.iconColor);});});
-document.getElementById("icon-scale").addEventListener("input",function(){ensureIconPlacement();if(editorState.iconPlacement)editorState.iconPlacement.size=parseIconScale();persistEditorDraft();if(currentMode==="draw")Celestial.redraw();});
-document.getElementById("icon-orientation").addEventListener("input",function(){editorState.orientation=this.value.trim()===""?null:parseFloat(this.value.trim());ensureIconPlacement();if(editorState.iconPlacement)editorState.iconPlacement.rotation=parseIconRotation();persistEditorDraft();if(currentMode==="draw")Celestial.redraw();});
+document.getElementById("icon-scale").addEventListener("input",function(){applyIconScaleValue(parseIconScale());});
+document.getElementById("icon-orientation").addEventListener("input",function(){applyIconRotationValue(parseIconRotation());});
+document.getElementById("btn-icon-scale-down").addEventListener("click",function(){applyIconScaleValue(parseIconScale()-0.1);});
+document.getElementById("btn-icon-scale-up").addEventListener("click",function(){applyIconScaleValue(parseIconScale()+0.1);});
+document.getElementById("btn-icon-rotation-down").addEventListener("click",function(){applyIconRotationValue(parseIconRotation()-15);});
+document.getElementById("btn-icon-rotation-up").addEventListener("click",function(){applyIconRotationValue(parseIconRotation()+15);});
+document.getElementById("btn-toggle-icon-panel").addEventListener("click",function(){var panel=document.getElementById("icon-selector-body");var collapsed=panel&&panel.classList.contains("collapsed");if(panel)panel.classList.toggle("collapsed",!collapsed);this.textContent=collapsed?"Masquer":"Choisir icône";});
 document.getElementById("btn-icon-search").addEventListener("click",function(){var q=(document.getElementById("icon-search").value||"animal").trim();var grid=document.getElementById("icon-grid");grid.innerHTML="<span style='color:#888;font-size:12px;'>Chargement…</span>";searchIconify(q,function(icons){grid.innerHTML="";if(!icons.length){grid.textContent="Aucun résultat.";return;}icons.forEach(function(iconId){var url=iconifySvgUrl(iconId);if(!url)return;url=iconifyUrlWithColor(url,editorState.iconColor);var cell=document.createElement("div");cell.style.cssText="width:38px;height:38px;display:flex;align-items:center;justify-content:center;background:#1a1a24;border-radius:6px;cursor:pointer;border:2px solid transparent;";cell.title=iconId;var img=document.createElement("img");img.src=url;img.alt=iconId;img.style.width="26px";img.style.height="26px";img.crossOrigin="anonymous";cell.appendChild(img);cell.addEventListener("click",function(){editorState.image=iconifySvgUrl(iconId);editorState.iconPlacement=null;ensureIconPlacement();persistEditorDraft();updateEditorBackgroundImage();updateIconLabel();grid.querySelectorAll("div").forEach(function(d){d.style.borderColor="transparent";});cell.style.borderColor="#3b82f6";});grid.appendChild(cell);});});});
 document.getElementById("btn-download-icon").addEventListener("click",function(){if(!editorState.image){alert("Aucune image.");return;}if(editorState.image.indexOf("data:")===0){alert("Déjà locale.");return;}fetch(iconifyUrlWithColor(editorState.image,editorState.iconColor)).then(function(r){return r.text();}).then(function(svg){editorState.image="data:image/svg+xml;base64,"+btoa(unescape(encodeURIComponent(svg)));editorState.iconPlacement=null;ensureIconPlacement();persistEditorDraft();updateEditorBackgroundImage();updateIconLabel();}).catch(function(){alert("Erreur.");});});
 document.getElementById("btn-remove-icon").addEventListener("click",function(){editorState.image=null;editorState.orientation=null;editorState.iconPlacement=null;document.getElementById("icon-scale").value="1.5";document.getElementById("icon-orientation").value="0";persistEditorDraft();updateEditorBackgroundImage();updateIconLabel();document.querySelectorAll("#icon-grid div").forEach(function(d){d.style.borderColor="transparent";});if(currentMode==="draw")Celestial.redraw();});
