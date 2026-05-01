@@ -332,6 +332,8 @@ setTimeout(function() {
             });
             if (customFeature) centerCoords = customFeature.properties.loc;
           }
+          var relativeIconInfo = customFeature ? computeRelativeIconDrawInfo(customFeature) : null;
+          if (relativeIconInfo && relativeIconInfo.centerCoords) centerCoords = relativeIconInfo.centerCoords;
           if (!centerCoords || centerCoords.length < 2) continue;
 
           var isVisible = true;
@@ -344,6 +346,10 @@ setTimeout(function() {
           if (!projectedCenter || isNaN(projectedCenter[0]) || isNaN(projectedCenter[1])) continue;
           var centerX_img = projectedCenter[0];
           var centerY_img = projectedCenter[1];
+          if (relativeIconInfo) {
+            centerX_img = relativeIconInfo.cx;
+            centerY_img = relativeIconInfo.cy;
+          }
 
           var extent = null;
           function getPointsFromCoords(coords) {
@@ -401,6 +407,7 @@ setTimeout(function() {
             var scaleRef = 400;
             imageSize = defaultScale * Math.max(0.3, Math.min(3, projScale / scaleRef));
           }
+          if (relativeIconInfo) imageSize = relativeIconInfo.size;
 
           var localNorthAngle = -Math.PI / 2;
           var decStep = centerCoords[1] < 89.5 ? 0.5 : -0.5;
@@ -426,6 +433,7 @@ setTimeout(function() {
               }
             }
           }
+          if (relativeIconInfo) angleRad = relativeIconInfo.angle;
 
           try {
             context.save();
@@ -532,6 +540,42 @@ var constellationOrientation = {
 
 // Debug : afficher boîte image (orange) et direction prioritaire (ligne depuis le centre)
 window.debugConstellationImages = false;
+
+function getFirstSegment(feature) {
+  if (!feature || !feature.geometry || !feature.geometry.coordinates) return null;
+  var coords = feature.geometry.coordinates;
+  for (var i = 0; i < coords.length; i++) {
+    var seg = coords[i];
+    if (Array.isArray(seg) && seg.length >= 2 && Array.isArray(seg[0]) && Array.isArray(seg[1])) {
+      return [seg[0], seg[1]];
+    }
+  }
+  return null;
+}
+
+function computeRelativeIconDrawInfo(feature) {
+  var placement = feature && feature.properties && feature.properties.iconPlacement;
+  var seg = getFirstSegment(feature);
+  if (!placement || !seg || typeof Celestial.mapProjection !== "function") return null;
+  var a = Celestial.mapProjection(seg[0]);
+  var b = Celestial.mapProjection(seg[1]);
+  if (!a || !b || isNaN(a[0]) || isNaN(b[0])) return null;
+  var dx = b[0] - a[0], dy = b[1] - a[1];
+  var len = Math.sqrt(dx * dx + dy * dy);
+  if (len < 0.01) return null;
+  var ux = dx / len, uy = dy / len, vx = -uy, vy = ux;
+  var relX = typeof placement.x === "number" ? placement.x : 0.5;
+  var relY = typeof placement.y === "number" ? placement.y : 0;
+  var relSize = typeof placement.size === "number" ? placement.size : 1;
+  var relRot = typeof placement.rotation === "number" ? placement.rotation : 0;
+  return {
+    cx: a[0] + len * (relX * ux + relY * vx),
+    cy: a[1] + len * (relX * uy + relY * vy),
+    size: Math.max(4, len * Math.max(0.05, relSize)),
+    angle: Math.atan2(dy, dx) + relRot * Math.PI / 180,
+    centerCoords: [(seg[0][0] + seg[1][0]) / 2, (seg[0][1] + seg[1][1]) / 2]
+  };
+}
 
 // Charger les images des constellations (built-in + custom)
 var constellationImageCache = {};
