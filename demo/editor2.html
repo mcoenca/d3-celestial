@@ -125,18 +125,12 @@
       stroke: #22d3ee; stroke-width: 1.5; stroke-dasharray: 3,3; opacity: 0.7;
       fill: none; pointer-events: none;
     }
-    #draw-overlay .icon-handle-pos {
-      fill: #3b82f6; stroke: #fff; stroke-width: 2;
-      cursor: move; pointer-events: all; touch-action: none;
-      filter: drop-shadow(0 0 4px rgba(59,130,246,0.6));
-    }
-    #draw-overlay .icon-handle-pos:hover { fill: #60a5fa; }
-    #draw-overlay .icon-handle-rot {
+    #draw-overlay .icon-handle-scale {
       fill: #22d3ee; stroke: #fff; stroke-width: 2;
-      cursor: alias; pointer-events: all; touch-action: none;
+      cursor: nwse-resize; pointer-events: all; touch-action: none;
       filter: drop-shadow(0 0 4px rgba(34,211,238,0.6));
     }
-    #draw-overlay .icon-handle-rot:hover { fill: #67e8f9; }
+    #draw-overlay .icon-handle-scale:hover { fill: #67e8f9; }
     #zoom-controls {
       position: absolute; bottom: 10px; right: 10px;
       display: flex; align-items: center; gap: 6px;
@@ -268,6 +262,38 @@
 <div id="screen-draw" class="tab-panel active">
   <div id="draw-layout">
     <div id="draw-left">
+      <div id="image-panel">
+        <div id="image-panel-header">
+          <div>
+            <div style="font-weight:600;font-size:13px;">1. Choisir l'icône de référence</div>
+            <span id="icon-selected-label" style="color:#94a3b8;font-size:12px;"></span>
+          </div>
+          <button type="button" class="btn secondary" id="btn-toggle-icon-panel">Masquer</button>
+        </div>
+        <div id="icon-selector-body">
+          <div style="display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-bottom:8px;">
+            <input type="text" id="icon-search" placeholder="Ex: animal, lion" style="padding:5px 8px; border:1px solid #3a3a4a; border-radius:4px; background:#1a1a24; color:#e0e0e0; width:150px; font-size:12px;" />
+            <button type="button" class="btn secondary" id="btn-icon-search">Chercher</button>
+            <label style="display:flex;align-items:center;gap:4px;color:#94a3b8;font-size:12px;">Couleur <input type="color" id="icon-color" value="#ffffff" style="width:28px;height:24px;padding:0;border:1px solid #3a3a4a;border-radius:4px;cursor:pointer;background:#1a1a24;" /></label>
+            <button type="button" class="btn secondary" id="btn-download-icon">DL</button>
+            <button type="button" class="btn secondary" id="btn-remove-icon">Retirer</button>
+          </div>
+          <div id="icon-grid" class="icon-grid"></div>
+        </div>
+      </div>
+      <div id="quick-controls">
+        <div class="stepper">
+          <span class="stepper-label">Taille</span>
+          <button type="button" id="btn-icon-scale-down" aria-label="Diminuer la taille">−</button>
+          <input type="number" id="icon-scale" min="0.1" max="10" step="0.1" value="1.0" title="Taille de l'icône de référence fixe" />
+          <button type="button" id="btn-icon-scale-up" aria-label="Augmenter la taille">+</button>
+          <span class="stepper-unit">×</span>
+        </div>
+      </div>
+      <h2>2. Poser la constellation sur l'icône</h2>
+      <div class="info-line">
+        L'icône reste fixe : glissez sa poignée bleue pour régler la taille, puis tapez/click vide pour poser les points. À la sauvegarde, les deltas avec le premier segment sont calculés pour l'affichage final.
+      </div>
       <!-- The single shared Celestial container lives here in draw mode -->
       <div id="draw-map-wrapper">
         <div id="celestial-map"></div>
@@ -284,59 +310,6 @@
         <button type="button" class="btn secondary" id="btn-remove-star">Supprimer dernière</button>
         <button type="button" class="btn primary" id="btn-save">Sauvegarder</button>
         <button type="button" class="btn secondary" id="btn-export">Exporter JSON</button>
-      </div>
-      <div id="quick-controls">
-        <div class="stepper">
-          <span class="stepper-label">Échelle</span>
-          <button type="button" id="btn-icon-scale-down" aria-label="Diminuer l'échelle">−</button>
-          <input type="number" id="icon-scale" min="0.1" max="10" step="0.1" value="1.5" title="Taille de l'icône en multiple du premier segment" />
-          <button type="button" id="btn-icon-scale-up" aria-label="Augmenter l'échelle">+</button>
-          <span class="stepper-unit">×</span>
-        </div>
-        <div class="stepper">
-          <span class="stepper-label">Incl.</span>
-          <button type="button" id="btn-icon-rotation-down" aria-label="Diminuer l'inclinaison">−</button>
-          <input type="number" id="icon-orientation" min="-180" max="180" step="15" value="0" title="Inclinaison relative au premier segment" />
-          <button type="button" id="btn-icon-rotation-up" aria-label="Augmenter l'inclinaison">+</button>
-          <span class="stepper-unit">°</span>
-        </div>
-        <div class="stepper">
-          <span class="stepper-label">ΔX</span>
-          <button type="button" id="btn-icon-dx-down" aria-label="Diminuer ΔX">−</button>
-          <input type="number" id="icon-deltax" min="-10" max="10" step="0.05" value="0" title="Décalage X de l'icône (multiple de la longueur du segment)" />
-          <button type="button" id="btn-icon-dx-up" aria-label="Augmenter ΔX">+</button>
-          <span class="stepper-unit">×</span>
-        </div>
-        <div class="stepper">
-          <span class="stepper-label">ΔY</span>
-          <button type="button" id="btn-icon-dy-down" aria-label="Diminuer ΔY">−</button>
-          <input type="number" id="icon-deltay" min="-10" max="10" step="0.05" value="0" title="Décalage Y de l'icône (multiple de la longueur du segment)" />
-          <button type="button" id="btn-icon-dy-up" aria-label="Augmenter ΔY">+</button>
-          <span class="stepper-unit">×</span>
-        </div>
-      </div>
-      <h2>Dessiner une constellation</h2>
-      <div class="info-line">
-        Clic vide = ajouter · Clic étoile = sélectionner · Clic 2e = relier · Clic trait = supprimer · Glisser = déplacer · Clic droit = supprimer.
-      </div>
-      <div id="image-panel">
-        <div id="image-panel-header">
-          <div>
-            <div style="font-weight:600;font-size:13px;">Sélecteur d'icône</div>
-            <span id="icon-selected-label" style="color:#94a3b8;font-size:12px;"></span>
-          </div>
-          <button type="button" class="btn secondary" id="btn-toggle-icon-panel">Masquer</button>
-        </div>
-        <div id="icon-selector-body">
-          <div style="display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-bottom:8px;">
-            <input type="text" id="icon-search" placeholder="Ex: animal, lion" style="padding:5px 8px; border:1px solid #3a3a4a; border-radius:4px; background:#1a1a24; color:#e0e0e0; width:150px; font-size:12px;" />
-            <button type="button" class="btn secondary" id="btn-icon-search">Chercher</button>
-            <label style="display:flex;align-items:center;gap:4px;color:#94a3b8;font-size:12px;">Couleur <input type="color" id="icon-color" value="#ffffff" style="width:28px;height:24px;padding:0;border:1px solid #3a3a4a;border-radius:4px;cursor:pointer;background:#1a1a24;" /></label>
-            <button type="button" class="btn secondary" id="btn-download-icon">DL</button>
-            <button type="button" class="btn secondary" id="btn-remove-icon">Retirer</button>
-          </div>
-          <div id="icon-grid" class="icon-grid"></div>
-        </div>
       </div>
       <div id="saved-section">
         <h3>Constellations enregistrées</h3>
@@ -434,7 +407,7 @@ var ZOOM_STEP = 1.3;
 var CONTAINER_ID = "celestial-map";
 
 var currentMode = "draw";
-var editorState = { name: "", stars: [], links: [], image: null, orientation: null, iconColor: "#ffffff", iconPlacement: null };
+var editorState = { name: "", stars: [], links: [], image: null, iconColor: "#ffffff", iconPlacement: null };
 var selectedStarIndex = null;
 var dragState = { active: false, starIndex: -1, didMove: false };
 var searchResults = [];
@@ -542,46 +515,44 @@ setTimeout(function() { installCelestialHook(); Celestial.redraw(); }, 1000);
 
 function clonePoint(p){return [Number(p[0]),Number(p[1])];}
 function getValidLinks(){return editorState.links.filter(function(e){return e[0]>=0&&e[0]<editorState.stars.length&&e[1]>=0&&e[1]<editorState.stars.length&&e[0]!==e[1];});}
-function getFirstLink(){var links=getValidLinks();return links.length?links[0]:null;}
+function getFirstLink(){var links=getValidLinks();return links.length?links[0]:(editorState.stars.length>=2?[0,1]:null);}
 function normalizeAngleDeg(a){while(a>180)a-=360;while(a<-180)a+=360;return a;}
-function parseIconRotation(){var el=document.getElementById("icon-orientation");var raw=el?el.value:"";var n=raw===""?0:parseFloat(raw);return isNaN(n)?0:n;}
-function parseIconScale(){var el=document.getElementById("icon-scale");var raw=el?el.value:"";var n=raw===""?1.5:parseFloat(raw);return isNaN(n)?1.5:Math.max(0.1,Math.min(10,n));}
+function parseIconScale(){var el=document.getElementById("icon-scale");var raw=el?el.value:"";var n=raw===""?1:parseFloat(raw);return isNaN(n)?1:Math.max(0.1,Math.min(10,n));}
+var FIXED_ICON_BASE_SIZE_RATIO=0.45;
+var FIXED_ICON_ANGLE=0;
+function getFixedIconBaseSize(){
+  var m=(typeof Celestial.metrics==="function")?Celestial.metrics():null;
+  if(!m||!m.width||!m.height)return 180;
+  return Math.min(m.width,m.height)*FIXED_ICON_BASE_SIZE_RATIO;
+}
+function getEditorIconRenderInfo(){
+  if(!editorState.image)return null;
+  var m=(typeof Celestial.metrics==="function")?Celestial.metrics():null;
+  if(!m||!m.width||!m.height)return null;
+  return {cx:m.width/2,cy:m.height/2,size:getFixedIconBaseSize()*parseIconScale(),angle:FIXED_ICON_ANGLE};
+}
 function computeIconPlacementForStars(stars){
   var link=getFirstLink();
-  if(!editorState.image||!link||stars.length<2||typeof Celestial.mapProjection!=="function") return null;
+  var info=getEditorIconRenderInfo();
+  if(!info||!link||stars.length<2||typeof Celestial.mapProjection!=="function") return null;
   var a=Celestial.mapProjection(stars[link[0]]),b=Celestial.mapProjection(stars[link[1]]);
   if(!a||!b||isNaN(a[0])||isNaN(b[0])) return null;
   var dx=b[0]-a[0],dy=b[1]-a[1],len=Math.sqrt(dx*dx+dy*dy);
   if(len<0.01) return null;
   var ux=dx/len,uy=dy/len,vx=-uy,vy=ux;
-  var sx=0,sy=0,minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity,count=0;
-  stars.forEach(function(p){var pt=Celestial.mapProjection(p);if(pt&&!isNaN(pt[0])){sx+=pt[0];sy+=pt[1];count++;minX=Math.min(minX,pt[0]);minY=Math.min(minY,pt[1]);maxX=Math.max(maxX,pt[0]);maxY=Math.max(maxY,pt[1]);}});
-  if(!count) return null;
-  var cx=sx/count,cy=sy/count,relX=((cx-a[0])*ux+(cy-a[1])*uy)/len,relY=((cx-a[0])*vx+(cy-a[1])*vy)/len;
-  var ext=Math.max(maxX-minX,maxY-minY);var autoSize=(ext>10?ext*1.5:Math.min(Celestial.metrics().width,Celestial.metrics().height)*0.5)/len;
-  var scaleEl=document.getElementById("icon-scale");
-  var size=scaleEl?parseIconScale():autoSize;
-  if(scaleEl&&(!scaleEl.value||scaleEl.value==="1.5")){size=Math.max(0.1,Math.min(10,autoSize));scaleEl.value=Number(size).toFixed(2);}
-  return { x: relX, y: relY, size: Math.max(0.1,size), rotation: parseIconRotation() };
+  var relX=((info.cx-a[0])*ux+(info.cy-a[1])*uy)/len;
+  var relY=((info.cx-a[0])*vx+(info.cy-a[1])*vy)/len;
+  var relRot=normalizeAngleDeg((info.angle-Math.atan2(dy,dx))*180/Math.PI);
+  return { x: relX, y: relY, size: Math.max(0.05,info.size/len), rotation: relRot };
 }
-function ensureIconPlacement(){if(!editorState.image)return null;if(!editorState.iconPlacement)editorState.iconPlacement=computeIconPlacementForStars(editorState.stars);return editorState.iconPlacement;}
-function getIconRenderInfo(stars){
-  var link=getFirstLink();
-  if(!editorState.image||!link||!stars||stars.length<2||typeof Celestial.mapProjection!=="function") return null;
-  var placement=ensureIconPlacement()||computeIconPlacementForStars(stars);if(!placement)return null;
-  var a=Celestial.mapProjection(stars[link[0]]),b=Celestial.mapProjection(stars[link[1]]);
-  if(!a||!b||isNaN(a[0])||isNaN(b[0])) return null;
-  var dx=b[0]-a[0],dy=b[1]-a[1],len=Math.sqrt(dx*dx+dy*dy);if(len<0.01)return null;
-  var ux=dx/len,uy=dy/len,vx=-uy,vy=ux;
-  return { cx:a[0]+len*((placement.x||0)*ux+(placement.y||0)*vx), cy:a[1]+len*((placement.x||0)*uy+(placement.y||0)*vy), size:len*Math.max(0.05,placement.size||1), angle:Math.atan2(dy,dx)+(placement.rotation||0)*Math.PI/180 };
-}
+function updateComputedIconPlacement(){editorState.iconPlacement=editorState.image?computeIconPlacementForStars(editorState.stars):null;return editorState.iconPlacement;}
 function getPreviewCoords(){return previewResultIndex>=0&&previewResultIndex<searchResults.length?searchResults[previewResultIndex].coords:null;}
 function persistEditorDraft(){
-  try{ensureIconPlacement();localStorage.setItem(DRAFT_STORAGE_KEY,JSON.stringify({name:editorState.name,stars:editorState.stars,links:editorState.links,image:editorState.image,orientation:editorState.orientation,iconColor:editorState.iconColor,iconPlacement:editorState.iconPlacement}));}catch(e){}
+  try{updateComputedIconPlacement();localStorage.setItem(DRAFT_STORAGE_KEY,JSON.stringify({name:editorState.name,stars:editorState.stars,links:editorState.links,image:editorState.image,iconColor:editorState.iconColor,iconScale:parseIconScale(),iconPlacement:editorState.iconPlacement}));}catch(e){}
 }
-function afterEditorChange(){previewResultIndex=-1;ensureIconPlacement();persistEditorDraft();scheduleSearchOpsEstimate();}
+function afterEditorChange(){previewResultIndex=-1;persistEditorDraft();scheduleSearchOpsEstimate();}
 function restoreEditorDraft(){
-  try{var raw=localStorage.getItem(DRAFT_STORAGE_KEY);if(!raw)return;var d=JSON.parse(raw);if(!d||!Array.isArray(d.stars)||!Array.isArray(d.links))return;editorState.name=d.name||"";editorState.stars=d.stars.map(clonePoint);editorState.links=d.links.slice();editorState.image=d.image||null;editorState.orientation=d.orientation==null?null:d.orientation;editorState.iconColor=d.iconColor||"#ffffff";editorState.iconPlacement=d.iconPlacement||null;var n=document.getElementById("constellation-name");if(n)n.value=editorState.name;var c=document.getElementById("icon-color");if(c)c.value=editorState.iconColor;syncIconInputsFromPlacement();var o=document.getElementById("icon-orientation");if(o&&!editorState.iconPlacement)o.value=(editorState.orientation==null)?0:Math.round(editorState.orientation);}catch(e){}
+  try{var raw=localStorage.getItem(DRAFT_STORAGE_KEY);if(!raw)return;var d=JSON.parse(raw);if(!d||!Array.isArray(d.stars)||!Array.isArray(d.links))return;editorState.name=d.name||"";editorState.stars=d.stars.map(clonePoint);editorState.links=d.links.slice();editorState.image=d.image||null;editorState.iconColor=d.iconColor||"#ffffff";editorState.iconPlacement=d.iconPlacement||null;var n=document.getElementById("constellation-name");if(n)n.value=editorState.name;var c=document.getElementById("icon-color");if(c)c.value=editorState.iconColor;var s=document.getElementById("icon-scale");if(s)s.value=Number(d.iconScale||1).toFixed(1);}catch(e){}
 }
 function focusDrawOnCoords(coords,ratio){if(!coords||!coords.length)return;var sx=0,sy=0;coords.forEach(function(p){sx+=p[0];sy+=p[1];});Celestial.rotate({center:[sx/coords.length,sy/coords.length,0]});setZoomAbsolute(INITIAL_ZOOM/Math.max(ratio||1,0.1));}
 function selectPreviewResult(idx){selectedResultIndex=idx;previewResultIndex=idx;var r=searchResults[idx];if(r)focusDrawOnCoords(r.coords,r.ratio);renderDrawResults();Celestial.redraw();}
@@ -649,8 +620,7 @@ function drawBackgroundImage() {
   var m=Celestial.metrics(), cx=m.width/2, cy=m.height/2, r=Math.min(m.width,m.height)/2;
   ctx.save();
   if(editorBackgroundImage&&editorBackgroundImage.complete&&editorBackgroundImage.naturalWidth>0) {
-    var targetStars=getPreviewCoords()||editorState.stars;
-    var info=getIconRenderInfo(targetStars);
+    var info=getEditorIconRenderInfo();
     if(info){ctx.globalAlpha=0.5;ctx.translate(info.cx,info.cy);ctx.rotate(info.angle);ctx.drawImage(editorBackgroundImage,-info.size/2,-info.size/2,info.size,info.size);ctx.rotate(-info.angle);ctx.translate(-info.cx,-info.cy);ctx.globalAlpha=1;}
   }
   ctx.strokeStyle="#333";ctx.lineWidth=1;ctx.beginPath();ctx.arc(cx,cy,r,0,2*Math.PI);ctx.stroke();ctx.restore();
@@ -742,87 +712,49 @@ function updateDrawOverlay() {
   var mb=document.getElementById("btn-match-search");if(mb)mb.disabled=editorState.stars.length<2||editorState.links.length<1;
 }
 
-/* ---- Icon handles (position + rotation/scale) ---- */
-var ICON_HANDLE_POS_K = 0.3;   // closer to icon body (in icon half-size units)
+/* ---- Icon handle (scale only) ---- */
 var ICON_HANDLE_ROT_K = 0.5;   // at icon bounding box corner
 function renderIconHandles(g){
   g.selectAll(".icon-handle-group").remove();
   if(currentMode!=="draw") return;
   if(!editorState.image) return;
-  var info=getIconRenderInfo(getPreviewCoords()||editorState.stars);
+  var info=getEditorIconRenderInfo();
   if(!info) return;
   var size=info.size;
   if(size<6) return; // icon too small to host handles, skip
   var ca=Math.cos(info.angle), sa=Math.sin(info.angle);
-  var pLx=size*ICON_HANDLE_POS_K, pLy=-size*ICON_HANDLE_POS_K;
-  var pSx=info.cx+pLx*ca-pLy*sa, pSy=info.cy+pLx*sa+pLy*ca;
   var rLx=size*ICON_HANDLE_ROT_K, rLy=-size*ICON_HANDLE_ROT_K;
   var rSx=info.cx+rLx*ca-rLy*sa, rSy=info.cy+rLx*sa+rLy*ca;
-  var rPos=isMobileViewport()?13:9;
   var rRot=isMobileViewport()?13:9;
   var hg=g.append("g").attr("class","icon-handle-group");
   hg.append("line").attr("class","icon-handle-line")
     .attr("x1",info.cx).attr("y1",info.cy).attr("x2",rSx).attr("y2",rSy);
-  hg.append("circle").attr("class","icon-handle-pos")
-    .attr("cx",pSx).attr("cy",pSy).attr("r",rPos)
-    .on("mousedown",function(){var ev=d3.event;if(ignoreSyntheticMouse(ev))return;startIconHandleDrag("pos",ev);})
-    .on("touchstart",function(){var ev=d3.event;lastTouchTime=Date.now();startIconHandleDrag("pos",ev);});
-  hg.append("circle").attr("class","icon-handle-rot")
+  hg.append("circle").attr("class","icon-handle-scale")
     .attr("cx",rSx).attr("cy",rSy).attr("r",rRot)
-    .on("mousedown",function(){var ev=d3.event;if(ignoreSyntheticMouse(ev))return;startIconHandleDrag("rot",ev);})
-    .on("touchstart",function(){var ev=d3.event;lastTouchTime=Date.now();startIconHandleDrag("rot",ev);});
+    .on("mousedown",function(){var ev=d3.event;if(ignoreSyntheticMouse(ev))return;startIconHandleDrag(ev);})
+    .on("touchstart",function(){var ev=d3.event;lastTouchTime=Date.now();startIconHandleDrag(ev);});
 }
-function startIconHandleDrag(type,event){
+function startIconHandleDrag(event){
   if(!editorState.image) return;
-  ensureIconPlacement();
-  if(!editorState.iconPlacement) return;
   var isTouch=event.type&&event.type.indexOf("touch")===0;
   if(isTouch) lastTouchTime=Date.now();
   if(event.stopPropagation) event.stopPropagation();
   if(event.preventDefault&&event.cancelable) event.preventDefault();
   var startXY=getDrawXY(event);
-  var info=getIconRenderInfo(editorState.stars);
-  var link=getFirstLink();
-  if(!info||!startXY||!link) return;
-  var a=Celestial.mapProjection(editorState.stars[link[0]]);
-  var b=Celestial.mapProjection(editorState.stars[link[1]]);
-  if(!a||!b) return;
-  var sdx=b[0]-a[0], sdy=b[1]-a[1];
-  var len=Math.sqrt(sdx*sdx+sdy*sdy);
-  if(len<0.01) return;
-  var ux=sdx/len, uy=sdy/len, vx=-uy, vy=ux;
-  var segAngle=Math.atan2(sdy,sdx);
-  var snap={cx:info.cx,cy:info.cy,size:info.size,angle:info.angle,
-            mouse:startXY,a:a,len:len,ux:ux,uy:uy,vx:vx,vy:vy,segAngle:segAngle};
+  var info=getEditorIconRenderInfo();
+  if(!info||!startXY) return;
+  var snap={cx:info.cx,cy:info.cy,size:info.size,scale:parseIconScale(),mouse:startXY};
   var moveEvt=isTouch?"touchmove":"mousemove";
   var upEvt=isTouch?"touchend":"mouseup";
   function onMove(e){
     if(isTouch) lastTouchTime=Date.now();
     var xy=getDrawXY(e);
     if(!xy){if(e.cancelable)e.preventDefault();return;}
-    if(type==="pos"){
-      var nCx=snap.cx+(xy[0]-snap.mouse[0]);
-      var nCy=snap.cy+(xy[1]-snap.mouse[1]);
-      var rxs=nCx-snap.a[0], rys=nCy-snap.a[1];
-      var nx=(rxs*snap.ux+rys*snap.uy)/snap.len;
-      var ny=(rxs*snap.vx+rys*snap.vy)/snap.len;
-      editorState.iconPlacement.x=Math.max(-10,Math.min(10,nx));
-      editorState.iconPlacement.y=Math.max(-10,Math.min(10,ny));
-    } else {
-      var Vx=xy[0]-snap.cx, Vy=xy[1]-snap.cy;
-      var Vlen=Math.sqrt(Vx*Vx+Vy*Vy);
-      if(Vlen<0.5){if(e.cancelable)e.preventDefault();return;}
-      var Vang=Math.atan2(Vy,Vx);
-      var R0=ICON_HANDLE_ROT_K*Math.SQRT2;
-      var newSizePx=Vlen/R0;
-      var newIconAngle=Vang+Math.PI/4;
-      var newScale=Math.max(0.1,Math.min(10,newSizePx/snap.len));
-      var newRotDeg=normalizeAngleDeg((newIconAngle-snap.segAngle)*180/Math.PI);
-      editorState.iconPlacement.size=newScale;
-      editorState.iconPlacement.rotation=newRotDeg;
-      editorState.orientation=newRotDeg;
-    }
-    syncIconInputsFromPlacement();
+    var Vx=xy[0]-snap.cx, Vy=xy[1]-snap.cy;
+    var Vlen=Math.sqrt(Vx*Vx+Vy*Vy);
+    if(Vlen<0.5){if(e.cancelable)e.preventDefault();return;}
+    var R0=ICON_HANDLE_ROT_K*Math.SQRT2;
+    applyIconScaleValue((Vlen/R0)/getFixedIconBaseSize());
     Celestial.redraw();
     if(e.cancelable) e.preventDefault();
   }
@@ -859,30 +791,15 @@ document.getElementById("btn-remove-star").addEventListener("click",function(){i
 function iconifySvgUrl(id){if(!id||id.indexOf(":")===-1)return null;var p=id.split(":");return "https://api.iconify.design/"+p[0]+"/"+p[1]+".svg";}
 function searchIconify(q,cb){fetch("https://api.iconify.design/search?query="+encodeURIComponent(q||"animal")+"&limit=48").then(function(r){return r.json();}).then(function(d){cb(d.icons||[]);}).catch(function(){cb([]);});}
 function updateIconLabel(){var el=document.getElementById("icon-selected-label");if(el)el.textContent=editorState.image?"Image définie":"";var body=document.getElementById("icon-selector-body"),btn=document.getElementById("btn-toggle-icon-panel");if(editorState.image&&body&&!body.classList.contains("collapsed")){body.classList.add("collapsed");if(btn)btn.textContent="Choisir icône";}}
-function applyIconScaleValue(value){var el=document.getElementById("icon-scale");if(el)el.value=Math.max(0.1,Math.min(10,value)).toFixed(1);ensureIconPlacement();if(editorState.iconPlacement)editorState.iconPlacement.size=parseIconScale();persistEditorDraft();if(currentMode==="draw")Celestial.redraw();}
-function applyIconRotationValue(value){var el=document.getElementById("icon-orientation");if(el)el.value=Math.round(normalizeAngleDeg(value));editorState.orientation=parseIconRotation();ensureIconPlacement();if(editorState.iconPlacement)editorState.iconPlacement.rotation=parseIconRotation();persistEditorDraft();if(currentMode==="draw")Celestial.redraw();}
-function parseIconDx(){var el=document.getElementById("icon-deltax");var raw=el?el.value:"";var n=raw===""?0:parseFloat(raw);return isNaN(n)?0:n;}
-function parseIconDy(){var el=document.getElementById("icon-deltay");var raw=el?el.value:"";var n=raw===""?0:parseFloat(raw);return isNaN(n)?0:n;}
-function applyIconDxValue(value){var v=Math.max(-10,Math.min(10,value));var el=document.getElementById("icon-deltax");if(el)el.value=v.toFixed(2);ensureIconPlacement();if(editorState.iconPlacement)editorState.iconPlacement.x=v;persistEditorDraft();if(currentMode==="draw")Celestial.redraw();}
-function applyIconDyValue(value){var v=Math.max(-10,Math.min(10,value));var el=document.getElementById("icon-deltay");if(el)el.value=v.toFixed(2);ensureIconPlacement();if(editorState.iconPlacement)editorState.iconPlacement.y=v;persistEditorDraft();if(currentMode==="draw")Celestial.redraw();}
-function syncIconInputsFromPlacement(){if(!editorState.iconPlacement)return;var p=editorState.iconPlacement;var dxe=document.getElementById("icon-deltax");if(dxe)dxe.value=Number(p.x||0).toFixed(2);var dye=document.getElementById("icon-deltay");if(dye)dye.value=Number(p.y||0).toFixed(2);var sce=document.getElementById("icon-scale");if(sce&&p.size!=null)sce.value=Number(p.size).toFixed(2);var roe=document.getElementById("icon-orientation");if(roe&&p.rotation!=null)roe.value=Math.round(p.rotation);}
+function applyIconScaleValue(value){var el=document.getElementById("icon-scale");if(el)el.value=Math.max(0.1,Math.min(10,value)).toFixed(1);updateComputedIconPlacement();persistEditorDraft();if(currentMode==="draw")Celestial.redraw();}
 document.getElementById("icon-color").addEventListener("input",function(){editorState.iconColor=this.value||"#ffffff";persistEditorDraft();updateEditorBackgroundImage();document.querySelectorAll("#icon-grid img").forEach(function(img){if(img.src&&img.src.indexOf("api.iconify.design")!==-1)img.src=iconifyUrlWithColor(img.src.split("?")[0],editorState.iconColor);});});
 document.getElementById("icon-scale").addEventListener("input",function(){applyIconScaleValue(parseIconScale());});
-document.getElementById("icon-orientation").addEventListener("input",function(){applyIconRotationValue(parseIconRotation());});
 document.getElementById("btn-icon-scale-down").addEventListener("click",function(){applyIconScaleValue(parseIconScale()-0.1);});
 document.getElementById("btn-icon-scale-up").addEventListener("click",function(){applyIconScaleValue(parseIconScale()+0.1);});
-document.getElementById("btn-icon-rotation-down").addEventListener("click",function(){applyIconRotationValue(parseIconRotation()-15);});
-document.getElementById("btn-icon-rotation-up").addEventListener("click",function(){applyIconRotationValue(parseIconRotation()+15);});
-document.getElementById("icon-deltax").addEventListener("input",function(){applyIconDxValue(parseIconDx());});
-document.getElementById("icon-deltay").addEventListener("input",function(){applyIconDyValue(parseIconDy());});
-document.getElementById("btn-icon-dx-down").addEventListener("click",function(){applyIconDxValue(parseIconDx()-0.05);});
-document.getElementById("btn-icon-dx-up").addEventListener("click",function(){applyIconDxValue(parseIconDx()+0.05);});
-document.getElementById("btn-icon-dy-down").addEventListener("click",function(){applyIconDyValue(parseIconDy()-0.05);});
-document.getElementById("btn-icon-dy-up").addEventListener("click",function(){applyIconDyValue(parseIconDy()+0.05);});
 document.getElementById("btn-toggle-icon-panel").addEventListener("click",function(){var panel=document.getElementById("icon-selector-body");var collapsed=panel&&panel.classList.contains("collapsed");if(panel)panel.classList.toggle("collapsed",!collapsed);this.textContent=collapsed?"Masquer":"Choisir icône";});
-document.getElementById("btn-icon-search").addEventListener("click",function(){var q=(document.getElementById("icon-search").value||"animal").trim();var grid=document.getElementById("icon-grid");grid.innerHTML="<span style='color:#888;font-size:12px;'>Chargement…</span>";searchIconify(q,function(icons){grid.innerHTML="";if(!icons.length){grid.textContent="Aucun résultat.";return;}icons.forEach(function(iconId){var url=iconifySvgUrl(iconId);if(!url)return;url=iconifyUrlWithColor(url,editorState.iconColor);var cell=document.createElement("div");cell.style.cssText="width:38px;height:38px;display:flex;align-items:center;justify-content:center;background:#1a1a24;border-radius:6px;cursor:pointer;border:2px solid transparent;";cell.title=iconId;var img=document.createElement("img");img.src=url;img.alt=iconId;img.style.width="26px";img.style.height="26px";img.crossOrigin="anonymous";cell.appendChild(img);cell.addEventListener("click",function(){editorState.image=iconifySvgUrl(iconId);editorState.iconPlacement=null;ensureIconPlacement();syncIconInputsFromPlacement();persistEditorDraft();updateEditorBackgroundImage();updateIconLabel();grid.querySelectorAll("div").forEach(function(d){d.style.borderColor="transparent";});cell.style.borderColor="#3b82f6";});grid.appendChild(cell);});});});
-document.getElementById("btn-download-icon").addEventListener("click",function(){if(!editorState.image){alert("Aucune image.");return;}if(editorState.image.indexOf("data:")===0){alert("Déjà locale.");return;}fetch(iconifyUrlWithColor(editorState.image,editorState.iconColor)).then(function(r){return r.text();}).then(function(svg){editorState.image="data:image/svg+xml;base64,"+btoa(unescape(encodeURIComponent(svg)));editorState.iconPlacement=null;ensureIconPlacement();persistEditorDraft();updateEditorBackgroundImage();updateIconLabel();}).catch(function(){alert("Erreur.");});});
-document.getElementById("btn-remove-icon").addEventListener("click",function(){editorState.image=null;editorState.orientation=null;editorState.iconPlacement=null;document.getElementById("icon-scale").value="1.5";document.getElementById("icon-orientation").value="0";var dxe=document.getElementById("icon-deltax");if(dxe)dxe.value="0";var dye=document.getElementById("icon-deltay");if(dye)dye.value="0";persistEditorDraft();updateEditorBackgroundImage();updateIconLabel();document.querySelectorAll("#icon-grid div").forEach(function(d){d.style.borderColor="transparent";});if(currentMode==="draw")Celestial.redraw();});
+document.getElementById("btn-icon-search").addEventListener("click",function(){var q=(document.getElementById("icon-search").value||"animal").trim();var grid=document.getElementById("icon-grid");grid.innerHTML="<span style='color:#888;font-size:12px;'>Chargement…</span>";searchIconify(q,function(icons){grid.innerHTML="";if(!icons.length){grid.textContent="Aucun résultat.";return;}icons.forEach(function(iconId){var url=iconifySvgUrl(iconId);if(!url)return;url=iconifyUrlWithColor(url,editorState.iconColor);var cell=document.createElement("div");cell.style.cssText="width:38px;height:38px;display:flex;align-items:center;justify-content:center;background:#1a1a24;border-radius:6px;cursor:pointer;border:2px solid transparent;";cell.title=iconId;var img=document.createElement("img");img.src=url;img.alt=iconId;img.style.width="26px";img.style.height="26px";img.crossOrigin="anonymous";cell.appendChild(img);cell.addEventListener("click",function(){editorState.image=iconifySvgUrl(iconId);updateComputedIconPlacement();persistEditorDraft();updateEditorBackgroundImage();updateIconLabel();grid.querySelectorAll("div").forEach(function(d){d.style.borderColor="transparent";});cell.style.borderColor="#3b82f6";});grid.appendChild(cell);});});});
+document.getElementById("btn-download-icon").addEventListener("click",function(){if(!editorState.image){alert("Aucune image.");return;}if(editorState.image.indexOf("data:")===0){alert("Déjà locale.");return;}fetch(iconifyUrlWithColor(editorState.image,editorState.iconColor)).then(function(r){return r.text();}).then(function(svg){editorState.image="data:image/svg+xml;base64,"+btoa(unescape(encodeURIComponent(svg)));updateComputedIconPlacement();persistEditorDraft();updateEditorBackgroundImage();updateIconLabel();}).catch(function(){alert("Erreur.");});});
+document.getElementById("btn-remove-icon").addEventListener("click",function(){editorState.image=null;editorState.iconPlacement=null;document.getElementById("icon-scale").value="1.0";persistEditorDraft();updateEditorBackgroundImage();updateIconLabel();document.querySelectorAll("#icon-grid div").forEach(function(d){d.style.borderColor="transparent";});if(currentMode==="draw")Celestial.redraw();});
 restoreEditorDraft();
 updateEditorBackgroundImage();
 updateIconLabel();
@@ -892,7 +809,7 @@ setTimeout(function(){document.getElementById("btn-icon-search").click();},600);
 /* ========================================================================
    SAVE / EXPORT
    ======================================================================== */
-function buildFeature(){var name=editorState.name||"Sans nom",stars=editorState.stars;if(stars.length<2)return null;var coords=editorState.links.length>0?editorState.links.filter(function(e){return e[0]>=0&&e[0]<stars.length&&e[1]>=0&&e[1]<stars.length&&e[0]!==e[1];}).map(function(e){return [stars[e[0]],stars[e[1]]];}):(function(){var c=[];for(var i=0;i<stars.length-1;i++)c.push([stars[i],stars[i+1]]);return c;})();if(!coords.length)return null;var mn=[Infinity,Infinity],mx=[-Infinity,-Infinity];stars.forEach(function(p){mn[0]=Math.min(mn[0],p[0]);mn[1]=Math.min(mn[1],p[1]);mx[0]=Math.max(mx[0],p[0]);mx[1]=Math.max(mx[1],p[1]);});var id="custom-"+(name.replace(/\s+/g,"-").toLowerCase()||"c")+"-"+Date.now();var props={n:name,fr:name,loc:[(mn[0]+mx[0])/2,(mn[1]+mx[1])/2]};if(editorState.image){ensureIconPlacement();props.image=editorState.image;props.iconColor=editorState.iconColor||"#ffffff";if(editorState.iconPlacement)props.iconPlacement={x:editorState.iconPlacement.x,y:editorState.iconPlacement.y,size:editorState.iconPlacement.size,rotation:editorState.iconPlacement.rotation||0};}var o=editorState.orientation;if(o!=null&&o!==""){var ov=typeof o==="number"?o:parseFloat(o);if(!isNaN(ov))props.orientation=ov;}return {type:"Feature",id:id,properties:props,geometry:{type:"MultiLineString",coordinates:coords}};}
+function buildFeature(){var name=editorState.name||"Sans nom",stars=editorState.stars;if(stars.length<2)return null;var coords=editorState.links.length>0?editorState.links.filter(function(e){return e[0]>=0&&e[0]<stars.length&&e[1]>=0&&e[1]<stars.length&&e[0]!==e[1];}).map(function(e){return [stars[e[0]],stars[e[1]]];}):(function(){var c=[];for(var i=0;i<stars.length-1;i++)c.push([stars[i],stars[i+1]]);return c;})();if(!coords.length)return null;var mn=[Infinity,Infinity],mx=[-Infinity,-Infinity];stars.forEach(function(p){mn[0]=Math.min(mn[0],p[0]);mn[1]=Math.min(mn[1],p[1]);mx[0]=Math.max(mx[0],p[0]);mx[1]=Math.max(mx[1],p[1]);});var id="custom-"+(name.replace(/\s+/g,"-").toLowerCase()||"c")+"-"+Date.now();var props={n:name,fr:name,loc:[(mn[0]+mx[0])/2,(mn[1]+mx[1])/2]};if(editorState.image){var placement=updateComputedIconPlacement();if(!placement)return null;props.image=editorState.image;props.iconColor=editorState.iconColor||"#ffffff";props.iconPlacement={x:placement.x,y:placement.y,size:placement.size,rotation:placement.rotation||0};props.iconEditorScale=parseIconScale();}return {type:"Feature",id:id,properties:props,geometry:{type:"MultiLineString",coordinates:coords}};}
 document.getElementById("btn-save").addEventListener("click",function(){var f=buildFeature();if(!f){alert("Ajoutez 2+ étoiles reliées.");return;}var list=[];try{var raw=localStorage.getItem(STORAGE_KEY);if(raw)list=JSON.parse(raw);}catch(e){}list.push(f);localStorage.setItem(STORAGE_KEY,JSON.stringify(list));localStorage.removeItem(DRAFT_STORAGE_KEY);alert("« "+f.properties.n+" » sauvegardée.");refreshSavedList();});
 document.getElementById("btn-export").addEventListener("click",function(){var list=[];try{var raw=localStorage.getItem(STORAGE_KEY);if(raw)list=JSON.parse(raw);}catch(e){}var blob=new Blob([JSON.stringify({constellations:list},null,2)],{type:"application/json"});var a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="custom-stars.json";a.click();});
 document.getElementById("btn-clear-all").addEventListener("click",function(){if(!confirm("Effacer toutes les constellations ?"))return;localStorage.removeItem(STORAGE_KEY);refreshSavedList();});
