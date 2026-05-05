@@ -92,6 +92,28 @@ async function main() {
     assert.strictEqual(iconInfoAfter.size, iconInfoBefore.size, "La taille ne change pas quand on pose des points");
 
     await page.fill("#constellation-name", "Editor2 Fixed Icon");
+    const initialPlacement = await page.evaluate(() => {
+      const placement = window.updateComputedIconPlacement();
+      return Object.assign({}, placement);
+    });
+    assert.ok(initialPlacement, "Le dessin initial doit produire un placement d'icône");
+
+    await page.evaluate(() => {
+      const source = window.editorState.stars.map((point) => point.slice());
+      const rotated = [
+        source[0],
+        [source[0][0] - (source[1][1] - source[0][1]), source[0][1] + (source[1][0] - source[0][0])]
+      ];
+      window.searchResults = [{ coords: rotated, ratio: 1, rms: 0, visibility: "visible" }];
+      window.applyResult(0);
+    });
+    const placementAfterApply = await page.evaluate(() => Object.assign({}, window.editorState.iconPlacement));
+    assert.deepStrictEqual(
+      placementAfterApply,
+      initialPlacement,
+      "Appliquer une correspondance ne doit pas recalculer le placement de l'icône fixe"
+    );
+
     const feature = await page.evaluate(() => window.buildFeature());
     assert.ok(feature && feature.properties && feature.properties.iconPlacement, "La sauvegarde doit calculer iconPlacement");
     assert.strictEqual(feature.properties.image, transparentIcon, "L'image doit être conservée");
@@ -100,6 +122,11 @@ async function main() {
     assert.strictEqual(typeof feature.properties.iconPlacement.size, "number");
     assert.strictEqual(typeof feature.properties.iconPlacement.rotation, "number");
     assert.ok(feature.properties.iconPlacement.size > 0, "La taille relative sauvegardée doit être positive");
+    assert.deepStrictEqual(
+      feature.properties.iconPlacement,
+      initialPlacement,
+      "La sauvegarde finale doit conserver le placement issu du dessin initial"
+    );
 
     console.log("PASS editor2-fixed-icon");
   } finally {
