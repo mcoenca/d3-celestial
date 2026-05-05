@@ -745,32 +745,38 @@ function updateDrawOverlay() {
 /* ---- Icon handles (position + rotation/scale) ---- */
 var ICON_HANDLE_POS_K = 0.3;   // closer to icon body (in icon half-size units)
 var ICON_HANDLE_ROT_K = 0.5;   // at icon bounding box corner
+var iconHandleDragState = { active: false, type: null, didMove: false };
 function renderIconHandles(g){
-  g.selectAll(".icon-handle-group").remove();
-  if(currentMode!=="draw") return;
-  if(!editorState.image) return;
+  if(currentMode!=="draw"||!editorState.image){g.selectAll(".icon-handle-group").remove();return;}
   var info=getIconRenderInfo(getPreviewCoords()||editorState.stars);
-  if(!info) return;
+  if(!info){g.selectAll(".icon-handle-group").remove();return;}
   var size=info.size;
-  if(size<6) return; // icon too small to host handles, skip
+  if(size<6){g.selectAll(".icon-handle-group").remove();return;} // icon too small to host handles, skip
   var ca=Math.cos(info.angle), sa=Math.sin(info.angle);
   var pLx=size*ICON_HANDLE_POS_K, pLy=-size*ICON_HANDLE_POS_K;
   var pSx=info.cx+pLx*ca-pLy*sa, pSy=info.cy+pLx*sa+pLy*ca;
   var rLx=size*ICON_HANDLE_ROT_K, rLy=-size*ICON_HANDLE_ROT_K;
   var rSx=info.cx+rLx*ca-rLy*sa, rSy=info.cy+rLx*sa+rLy*ca;
-  var rPos=isMobileViewport()?13:9;
-  var rRot=isMobileViewport()?13:9;
-  var hg=g.append("g").attr("class","icon-handle-group");
-  hg.append("line").attr("class","icon-handle-line")
-    .attr("x1",info.cx).attr("y1",info.cy).attr("x2",rSx).attr("y2",rSy);
-  hg.append("circle").attr("class","icon-handle-pos")
-    .attr("cx",pSx).attr("cy",pSy).attr("r",rPos)
+  var rPos=isMobileViewport()?18:9;
+  var rRot=isMobileViewport()?18:9;
+  var hg=g.selectAll("g.icon-handle-group").data([info]);
+  var enter=hg.enter().append("g").attr("class","icon-handle-group");
+  enter.append("line").attr("class","icon-handle-line");
+  enter.append("circle").attr("class","icon-handle-pos")
     .on("mousedown",function(){var ev=d3.event;if(ignoreSyntheticMouse(ev))return;startIconHandleDrag("pos",ev);})
     .on("touchstart",function(){var ev=d3.event;lastTouchTime=Date.now();startIconHandleDrag("pos",ev);});
-  hg.append("circle").attr("class","icon-handle-rot")
-    .attr("cx",rSx).attr("cy",rSy).attr("r",rRot)
+  enter.append("circle").attr("class","icon-handle-rot")
     .on("mousedown",function(){var ev=d3.event;if(ignoreSyntheticMouse(ev))return;startIconHandleDrag("rot",ev);})
     .on("touchstart",function(){var ev=d3.event;lastTouchTime=Date.now();startIconHandleDrag("rot",ev);});
+  hg.exit().remove();
+  hg=g.selectAll("g.icon-handle-group");
+  hg.select("line.icon-handle-line")
+    .attr("x1",info.cx).attr("y1",info.cy).attr("x2",rSx).attr("y2",rSy);
+  hg.select("circle.icon-handle-pos")
+    .attr("cx",pSx).attr("cy",pSy).attr("r",rPos);
+  hg.select("circle.icon-handle-rot")
+    .attr("cx",rSx).attr("cy",rSy).attr("r",rRot);
+  hg.each(function(){this.parentNode.appendChild(this);});
 }
 function startIconHandleDrag(type,event){
   if(!editorState.image) return;
@@ -778,28 +784,34 @@ function startIconHandleDrag(type,event){
   if(!editorState.iconPlacement) return;
   var isTouch=event.type&&event.type.indexOf("touch")===0;
   if(isTouch) lastTouchTime=Date.now();
+  iconHandleDragState={active:true,type:type,didMove:false};
+  suppressNextOverlayClick=true;
   if(event.stopPropagation) event.stopPropagation();
+  if(event.stopImmediatePropagation) event.stopImmediatePropagation();
   if(event.preventDefault&&event.cancelable) event.preventDefault();
   var startXY=getDrawXY(event);
   var info=getIconRenderInfo(editorState.stars);
   var link=getFirstLink();
-  if(!info||!startXY||!link) return;
+  if(!info||!startXY||!link){iconHandleDragState.active=false;return;}
   var a=Celestial.mapProjection(editorState.stars[link[0]]);
   var b=Celestial.mapProjection(editorState.stars[link[1]]);
-  if(!a||!b) return;
+  if(!a||!b){iconHandleDragState.active=false;return;}
   var sdx=b[0]-a[0], sdy=b[1]-a[1];
   var len=Math.sqrt(sdx*sdx+sdy*sdy);
-  if(len<0.01) return;
+  if(len<0.01){iconHandleDragState.active=false;return;}
   var ux=sdx/len, uy=sdy/len, vx=-uy, vy=ux;
   var segAngle=Math.atan2(sdy,sdx);
   var snap={cx:info.cx,cy:info.cy,size:info.size,angle:info.angle,
             mouse:startXY,a:a,len:len,ux:ux,uy:uy,vx:vx,vy:vy,segAngle:segAngle};
   var moveEvt=isTouch?"touchmove":"mousemove";
   var upEvt=isTouch?"touchend":"mouseup";
+  var cancelEvt=isTouch?"touchcancel":null;
+  function stopEvent(e){if(e&&e.stopPropagation)e.stopPropagation();if(e&&e.preventDefault&&e.cancelable)e.preventDefault();}
   function onMove(e){
     if(isTouch) lastTouchTime=Date.now();
+    iconHandleDragState.didMove=true;
     var xy=getDrawXY(e);
-    if(!xy){if(e.cancelable)e.preventDefault();return;}
+    if(!xy){stopEvent(e);return;}
     if(type==="pos"){
       var nCx=snap.cx+(xy[0]-snap.mouse[0]);
       var nCy=snap.cy+(xy[1]-snap.mouse[1]);
@@ -824,17 +836,20 @@ function startIconHandleDrag(type,event){
     }
     syncIconInputsFromPlacement();
     Celestial.redraw();
-    if(e.cancelable) e.preventDefault();
+    stopEvent(e);
   }
   function onUp(e){
     if(isTouch) lastTouchTime=Date.now();
     document.removeEventListener(moveEvt,onMove);
     document.removeEventListener(upEvt,onUp);
+    if(cancelEvt)document.removeEventListener(cancelEvt,onUp);
+    iconHandleDragState.active=false;
     persistEditorDraft();
-    if(e&&e.cancelable) e.preventDefault();
+    stopEvent(e);
   }
   document.addEventListener(moveEvt,onMove,{passive:false});
   document.addEventListener(upEvt,onUp,{passive:false});
+  if(cancelEvt)document.addEventListener(cancelEvt,onUp,{passive:false});
 }
 function getEventPoint(event){if(event&&event.touches&&event.touches.length)return event.touches[0];if(event&&event.changedTouches&&event.changedTouches.length)return event.changedTouches[0];return event;}
 function getDrawXY(event){event=getEventPoint(event);var o=document.getElementById("draw-overlay");if(!o||!event)return null;var r=o.getBoundingClientRect();var w=parseFloat(o.getAttribute("width")),h=parseFloat(o.getAttribute("height"));return [(event.clientX-r.left)*(w/r.width),(event.clientY-r.top)*(h/r.height)];}
@@ -847,8 +862,10 @@ function removeLinkByKey(key){if(!key)return;for(var i=0;i<editorState.links.len
 function startStarDrag(index,event,circleEl){var isTouch=event&&event.type&&event.type.indexOf("touch")===0,move=isTouch?"touchmove":"mousemove",up=isTouch?"touchend":"mouseup";if(isTouch)lastTouchTime=Date.now();dragState={active:true,starIndex:index,didMove:false};function mH(e){if(!dragState.active)return;dragState.didMove=true;if(isTouch)lastTouchTime=Date.now();updateDraggedStar(index,e,circleEl);if(e.cancelable)e.preventDefault();}function uH(e){if(isTouch)lastTouchTime=Date.now();dragState.active=false;document.removeEventListener(move,mH);document.removeEventListener(up,uH);if(!dragState.didMove){if(isTouch)handleStarTap(index);else handleStarClick(index);}afterEditorChange();Celestial.redraw();if(e&&e.cancelable)e.preventDefault();}document.addEventListener(move,mH,{passive:false});document.addEventListener(up,uH,{passive:false});}
 var lastTouchTime=0,suppressNextOverlayClick=false,lastStarTap={index:-1,time:0};
 function handleStarTap(index){var now=Date.now();if(lastStarTap.index===index&&now-lastStarTap.time<350){removeStarAt(index);selectedStarIndex=null;lastStarTap={index:-1,time:0};afterEditorChange();Celestial.redraw();return;}lastStarTap={index:index,time:now};handleStarClick(index);}
-function bindDrawTouchInteractions(){var overlay=document.getElementById("draw-overlay");if(!overlay||overlay.__drawTouchBound)return;overlay.__drawTouchBound=true;overlay.addEventListener("touchend",function(ev){if(currentMode!=="draw"||(ev.touches&&ev.touches.length))return;var t=ev.changedTouches&&ev.changedTouches[0];if(!t)return;lastTouchTime=Date.now();if(ev.target&&ev.target.classList&&ev.target.classList.contains("star-circle"))return;if(ev.target&&ev.target.classList&&ev.target.classList.contains("edit-line"))return;if(dragState.didMove){dragState.didMove=false;return;}suppressNextOverlayClick=true;addStarAtEvent(t);ev.preventDefault();},{passive:false});}
-d3.select("#draw-overlay").on("click",function(){if(currentMode!=="draw")return;var ev=d3.event;if(suppressNextOverlayClick||ignoreSyntheticMouse(ev)){suppressNextOverlayClick=false;return;}if(dragState.didMove){dragState.didMove=false;return;}if(ev.target&&ev.target.classList&&(ev.target.classList.contains("star-circle")||ev.target.classList.contains("edit-line")))return;addStarAtEvent(ev);});
+function targetHasOverlayClass(target,names){while(target&&target!==document){if(target.classList){for(var i=0;i<names.length;i++)if(target.classList.contains(names[i]))return true;}target=target.parentNode;}return false;}
+function isOverlayEditTarget(target){return targetHasOverlayClass(target,["star-circle","star-hit","edit-line","edit-line-hit","icon-handle-group","icon-handle-pos","icon-handle-rot"]);}
+function bindDrawTouchInteractions(){var overlay=document.getElementById("draw-overlay");if(!overlay||overlay.__drawTouchBound)return;overlay.__drawTouchBound=true;overlay.addEventListener("touchend",function(ev){if(currentMode!=="draw"||(ev.touches&&ev.touches.length))return;var t=ev.changedTouches&&ev.changedTouches[0];if(!t)return;lastTouchTime=Date.now();if(isOverlayEditTarget(ev.target)||iconHandleDragState.active||iconHandleDragState.didMove){suppressNextOverlayClick=true;if(iconHandleDragState.didMove)iconHandleDragState.didMove=false;return;}if(dragState.didMove){dragState.didMove=false;return;}suppressNextOverlayClick=true;addStarAtEvent(t);ev.preventDefault();},{passive:false});}
+d3.select("#draw-overlay").on("click",function(){if(currentMode!=="draw")return;var ev=d3.event;if(suppressNextOverlayClick||ignoreSyntheticMouse(ev)){suppressNextOverlayClick=false;return;}if(dragState.didMove){dragState.didMove=false;return;}if(isOverlayEditTarget(ev.target))return;addStarAtEvent(ev);});
 bindDrawTouchInteractions();
 document.getElementById("constellation-name").addEventListener("input",function(){editorState.name=this.value.trim();persistEditorDraft();});
 document.getElementById("btn-remove-star").addEventListener("click",function(){if(editorState.stars.length){removeStarAt(editorState.stars.length-1);afterEditorChange();Celestial.redraw();}});
