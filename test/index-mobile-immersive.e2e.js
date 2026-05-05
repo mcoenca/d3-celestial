@@ -91,7 +91,8 @@ async function main() {
         window.Celestial &&
         Celestial.mapProjection &&
         typeof Celestial.zoomBy === "function" &&
-        document.querySelector("#celestial-map canvas")
+        document.querySelector("#celestial-map canvas") &&
+        document.getElementById("celestial-map").__touchNavigationBound
       ),
       { timeout: 30000 }
     );

@@ -796,6 +796,7 @@ applyResponsiveVisualDefaults(true);
 loadAspectSettings();
 Celestial.display(config);
 hideBuiltInCelestialForm();
+fixZoomNoRotation();
 
 var mobileViewportQuery = window.matchMedia("(max-width: 640px)");
 function onViewportPresetChange() {
