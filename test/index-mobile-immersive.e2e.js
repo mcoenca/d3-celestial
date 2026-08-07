@@ -109,6 +109,9 @@ async function main() {
         titleHidden: title.width <= 1 && title.height <= 1,
         infoHidden: info.width <= 1 && info.height <= 1,
         hasEditorLink: document.querySelector(".menu-link").getAttribute("href") === "demo/editor2.html",
+        hasAlgoLink: Array.from(document.querySelectorAll(".menu-link")).some(
+          (link) => link.getAttribute("href") === "demo/matching-lab.html"
+        ),
         hasHomeIcon: !!document.querySelector(".sky-home .sky-icon")
       };
     });
@@ -119,6 +122,7 @@ async function main() {
     assert.ok(layout.titleHidden, "Le titre ne doit pas prendre de place sur mobile");
     assert.ok(layout.infoHidden, "La description ne doit pas prendre de place sur mobile");
     assert.ok(layout.hasEditorLink, "Le menu doit exposer le lien Éditeur");
+    assert.ok(layout.hasAlgoLink, "Le menu doit exposer le lien Algo live");
     assert.ok(layout.hasHomeIcon, "Le menu doit exposer l'icône Ciel de Paris");
 
     const panelBefore = await page.evaluate(() => ({

@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Laboratoire de matching céleste</title>
+  <link rel="stylesheet" href="../celestial.css">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #05070d;
+      --panel: #0d111c;
+      --panel-2: #121827;
+      --line: #253047;
+      --muted: #8996ad;
+      --text: #edf3ff;
+      --blue: #60a5fa;
+      --cyan: #22d3ee;
+      --green: #34d399;
+      --red: #fb7185;
+      --amber: #fbbf24;
+      --violet: #a78bfa;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--text); }
+    body { font-family: Inter, "Segoe UI", system-ui, sans-serif; overflow: hidden; }
+    button, input, select { font: inherit; }
+    button, input[type="range"], select { touch-action: manipulation; }
+    .topbar {
+      height: 54px; display: flex; align-items: center; gap: 10px;
+      padding: 0 max(14px, env(safe-area-inset-right)) 0 max(14px, env(safe-area-inset-left));
+      border-bottom: 1px solid rgba(148,163,184,.16);
+      background: rgba(7,10,18,.94); backdrop-filter: blur(16px); z-index: 20;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; min-width: 0; font-weight: 800; letter-spacing: -.02em; }
+    .brand-mark {
+      width: 31px; height: 31px; border: 1px solid rgba(96,165,250,.4); border-radius: 50%;
+      display: grid; place-items: center; color: #bfdbfe;
+      background: radial-gradient(circle at 38% 32%, rgba(96,165,250,.34), rgba(15,23,42,.9) 65%);
+    }
+    .brand-mark::before { content: "✦"; font-size: 15px; }
+    .brand-copy { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .brand-copy small { display: block; color: var(--muted); font-size: 10px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
+    .top-spacer { flex: 1; }
+    .top-link {
+      color: #b9c8dd; text-decoration: none; font-size: 12px; font-weight: 700;
+      padding: 7px 10px; border: 1px solid transparent; border-radius: 999px; white-space: nowrap;
+    }
+    .top-link:hover { color: #fff; border-color: var(--line); background: var(--panel-2); }
+    .top-link.active { color: #bfdbfe; border-color: rgba(96,165,250,.35); background: rgba(30,64,175,.18); }
+
+    .app {
+      display: grid; grid-template-columns: 350px minmax(0,1fr);
+      height: calc(100vh - 54px); height: calc(100dvh - 54px);
+    }
+    .sidebar {
+      min-width: 0; overflow-y: auto; overscroll-behavior: contain;
+      padding: 14px; border-right: 1px solid rgba(148,163,184,.15); background: var(--panel);
+    }
+    .panel {
+      padding: 12px; margin-bottom: 10px; border: 1px solid rgba(148,163,184,.14);
+      border-radius: 12px; background: rgba(18,24,39,.72);
+    }
+    .panel:last-child { margin-bottom: 0; }
+    .eyebrow { color: var(--blue); font-size: 10px; text-transform: uppercase; letter-spacing: .12em; font-weight: 800; }
+    h1 { margin: 4px 0 5px; font-size: 19px; line-height: 1.16; letter-spacing: -.025em; }
+    .lead { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+    .draft-line {
+      display: flex; align-items: center; gap: 8px; margin-top: 10px; padding-top: 9px;
+      border-top: 1px solid rgba(148,163,184,.12); font-size: 11px;
+    }
+    .draft-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 9px rgba(52,211,153,.65); }
+    .draft-dot.demo { background: var(--amber); box-shadow: 0 0 9px rgba(251,191,36,.5); }
+    .draft-name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .draft-meta { color: var(--muted); white-space: nowrap; }
+    .panel-title { margin: 0 0 10px; color: #dbe7f7; font-size: 12px; font-weight: 800; }
+    .control { margin-bottom: 10px; }
+    .control:last-child { margin-bottom: 0; }
+    .control-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 5px; }
+    .control label { color: #b9c4d6; font-size: 11px; font-weight: 650; }
+    .control-value { color: #fff; font-size: 11px; font-variant-numeric: tabular-nums; }
+    .control small { display: block; color: #64748b; font-size: 9px; line-height: 1.35; margin-top: 4px; }
+    select, input[type="number"] {
+      min-height: 34px; border: 1px solid #334155; border-radius: 8px;
+      background: #101827; color: #e5edf9; padding: 5px 8px; outline: none;
+    }
+    select:focus, input:focus { border-color: var(--blue); }
+    select { width: 100%; font-size: 11px; }
+    input[type="range"] { width: 100%; accent-color: #3b82f6; }
+    .range-row { display: grid; grid-template-columns: 1fr 56px; align-items: center; gap: 8px; }
+    .range-row input[type="number"] { width: 56px; font-size: 11px; text-align: center; padding: 4px; }
+    .double-range { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 7px; }
+    .double-range span { color: #64748b; font-size: 10px; }
+    .double-range input { width: 100%; }
+    .parameter-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .mini-stat {
+      min-width: 0; padding: 8px; border: 1px solid rgba(148,163,184,.12);
+      border-radius: 9px; background: rgba(5,9,17,.55);
+    }
+    .mini-stat span { display: block; color: #718097; font-size: 9px; text-transform: uppercase; letter-spacing: .06em; }
+    .mini-stat strong { display: block; margin-top: 2px; font-size: 14px; font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; }
+    .explain {
+      display: grid; grid-template-columns: 18px 1fr; gap: 7px; margin-top: 9px;
+      color: var(--muted); font-size: 10px; line-height: 1.4;
+    }
+    .explain b { color: #dce7f6; }
+    .step-index {
+      width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center;
+      color: #bfdbfe; background: rgba(59,130,246,.16); font-size: 9px; font-weight: 800;
+    }
+
+    .stage { position: relative; min-width: 0; min-height: 0; overflow: hidden; background: #02040a; }
+    #sky-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+    .stage-shade { position: absolute; inset: 0; pointer-events: none; box-shadow: inset 0 0 90px rgba(0,0,0,.5); }
+    .map-badge {
+      position: absolute; top: 12px; left: 12px; max-width: min(380px, calc(100% - 24px));
+      padding: 8px 10px; border: 1px solid rgba(148,163,184,.18); border-radius: 10px;
+      background: rgba(7,10,18,.78); backdrop-filter: blur(12px); pointer-events: none;
+    }
+    .map-badge strong { display: block; font-size: 11px; }
+    .map-badge span { display: block; margin-top: 2px; color: #8d9ab0; font-size: 9px; line-height: 1.3; }
+    .legend {
+      position: absolute; top: 12px; right: 12px; padding: 8px 10px;
+      border: 1px solid rgba(148,163,184,.18); border-radius: 10px;
+      background: rgba(7,10,18,.78); backdrop-filter: blur(12px); pointer-events: none;
+    }
+    .legend-row { display: flex; align-items: center; gap: 6px; color: #aeb9cb; font-size: 9px; margin: 3px 0; }
+    .legend-mark { width: 15px; height: 3px; border-radius: 3px; }
+    .legend-mark.dot { width: 6px; height: 6px; border-radius: 50%; }
+    .playback {
+      position: absolute; left: 50%; bottom: max(14px, env(safe-area-inset-bottom)); transform: translateX(-50%);
+      width: min(720px, calc(100% - 28px)); padding: 10px;
+      border: 1px solid rgba(148,163,184,.2); border-radius: 14px;
+      background: rgba(7,10,18,.88); backdrop-filter: blur(16px); box-shadow: 0 18px 60px rgba(0,0,0,.4);
+    }
+    .playback-top { display: flex; align-items: center; gap: 9px; }
+    .transport { display: flex; gap: 5px; }
+    .icon-btn {
+      height: 34px; min-width: 34px; padding: 0 9px; display: grid; place-items: center;
+      color: #dce7f6; border: 1px solid #354158; border-radius: 9px; background: #151d2d; cursor: pointer;
+    }
+    .icon-btn:hover { border-color: #587093; background: #1a2538; }
+    .icon-btn.primary { min-width: 76px; display: flex; gap: 6px; color: #fff; background: #2563eb; border-color: #3b82f6; font-size: 11px; font-weight: 800; }
+    .icon-btn:disabled { opacity: .38; cursor: default; }
+    .play-info { flex: 1; min-width: 0; }
+    .play-info strong { display: block; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .play-info span { display: block; color: var(--muted); font-size: 9px; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .speed { width: 76px; min-height: 34px; }
+    .zoom-control { display: flex; align-items: center; gap: 6px; min-width: 140px; }
+    .zoom-control span { color: #8fa0b8; font-size: 9px; }
+    .zoom-control input { width: 88px; }
+    .progress-track { height: 3px; margin-top: 8px; border-radius: 4px; overflow: hidden; background: #1f2937; }
+    .progress-fill { width: 0; height: 100%; background: linear-gradient(90deg,#3b82f6,#22d3ee); transition: width .12s linear; }
+    .loading {
+      position: absolute; inset: 0; z-index: 8; display: none; place-items: center;
+      background: rgba(2,4,10,.44); pointer-events: none;
+    }
+    .loading.visible { display: grid; }
+    .loading-card {
+      padding: 12px 16px; border: 1px solid rgba(96,165,250,.24); border-radius: 12px;
+      background: rgba(9,14,25,.92); color: #c6d5e8; font-size: 11px;
+    }
+    .pulse { display: inline-block; width: 7px; height: 7px; margin-right: 8px; border-radius: 50%; background: var(--blue); animation: pulse 1s infinite alternate; }
+    @keyframes pulse { to { opacity: .25; transform: scale(.75); } }
+    .status-error { color: #fecdd3 !important; }
+
+    @media (max-width: 760px) {
+      body { overflow: auto; }
+      .topbar { position: sticky; top: 0; height: calc(50px + env(safe-area-inset-top)); padding-top: env(safe-area-inset-top); }
+      .brand-copy { font-size: 13px; }
+      .brand-copy small { display: none; }
+      .top-link { padding: 6px 7px; font-size: 10px; }
+      .top-link.active { display: none; }
+      .app { display: flex; flex-direction: column; height: auto; min-height: calc(100dvh - 50px - env(safe-area-inset-top)); }
+      .stage { order: 1; width: 100%; height: 58vh; height: 58dvh; min-height: 390px; }
+      .sidebar { order: 2; width: 100%; overflow: visible; border: 0; border-top: 1px solid rgba(148,163,184,.15); padding: 10px; }
+      .panel { padding: 11px; }
+      .intro-panel .lead { display: none; }
+      h1 { font-size: 16px; }
+      .map-badge { top: 8px; left: 8px; padding: 6px 8px; }
+      .map-badge span { display: none; }
+      .legend { top: 8px; right: 8px; padding: 5px 7px; }
+      .legend-row { font-size: 8px; margin: 2px 0; }
+      .playback { bottom: max(8px, env(safe-area-inset-bottom)); width: calc(100% - 16px); padding: 8px; }
+      .playback-top { gap: 5px; flex-wrap: wrap; }
+      .transport { flex: 0 0 auto; }
+      .icon-btn { height: 36px; }
+      .icon-btn.primary { min-width: 68px; }
+      .play-info { order: -1; flex-basis: 100%; }
+      .speed { width: 66px; height: 36px; }
+      .zoom-control { flex: 1; min-width: 95px; }
+      .zoom-control input { width: 100%; }
+    }
+    @media (max-width: 390px) {
+      .top-link.home { display: none; }
+      .parameter-grid { gap: 6px; }
+      .mini-stat strong { font-size: 12px; }
+      .legend-row:nth-child(1), .legend-row:nth-child(2) { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand-copy">Laboratoire de matching<small>Visualisation temps réel</small></span>
+    </div>
+    <span class="top-spacer"></span>
+    <a class="top-link home" href="../">Ciel de Paris</a>
+    <a class="top-link" href="editor2.html">Éditeur</a>
+    <a class="top-link active" href="matching-lab.html" aria-current="page">Algo live</a>
+  </header>
+
+  <main class="app">
+    <aside class="sidebar" aria-label="Paramètres du matching">
+      <section class="panel intro-panel">
+        <div class="eyebrow">Vue dédiée</div>
+        <h1>Comprendre chaque décision</h1>
+        <p class="lead">Le disque représente tout le ciel à plat : pôle nord au centre, pôle sud sur le bord. L’éditeur reste indépendant.</p>
+        <div class="draft-line">
+          <span class="draft-dot" id="draft-dot"></span>
+          <span class="draft-name" id="draft-name">Chargement du brouillon…</span>
+          <span class="draft-meta" id="draft-meta"></span>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2 class="panel-title">Paramètres de l’algorithme</h2>
+        <div class="control">
+          <div class="control-head"><label for="algorithm">Classement des candidats</label></div>
+          <select id="algorithm">
+            <option value="rms">RMS seul</option>
+            <option value="rms-angles">RMS + angles</option>
+            <option value="ratios-angles">Ratios + angles</option>
+          </select>
+          <small>Le classement intervient après qu’un essai a trouvé toutes les étoiles.</small>
+        </div>
+        <div class="control">
+          <div class="control-head">
+            <label>Échelle de la paire de départ</label>
+            <span class="control-value" id="scale-value">×0,9 – ×1,1</span>
+          </div>
+          <div class="double-range">
+            <input type="number" id="scale-min" min="0.1" max="50" step="0.1" value="0.9" aria-label="Échelle minimale">
+            <span>à</span>
+            <input type="number" id="scale-max" min="0.1" max="100" step="0.1" value="1.1" aria-label="Échelle maximale">
+          </div>
+        </div>
+        <div class="control">
+          <div class="control-head">
+            <label for="tolerance">Tolérance étoile</label>
+            <span class="control-value" id="tolerance-value">0,4°</span>
+          </div>
+          <div class="range-row">
+            <input type="range" id="tolerance" min="0.1" max="3" step="0.1" value="0.4">
+            <input type="number" id="tolerance-number" min="0.1" max="3" step="0.1" value="0.4" aria-label="Tolérance en degrés">
+          </div>
+        </div>
+        <div class="control">
+          <div class="control-head">
+            <label for="magnitude">Magnitude limite</label>
+            <span class="control-value" id="magnitude-value">6,0</span>
+          </div>
+          <input type="range" id="magnitude" min="3" max="6" step="0.25" value="6">
+          <small>Plus la valeur est haute, plus le catalogue et le nombre de paires grandissent.</small>
+        </div>
+        <div class="control">
+          <div class="control-head">
+            <label for="size-weight">Poids de la taille</label>
+            <span class="control-value" id="size-weight-value">0,30</span>
+          </div>
+          <input type="range" id="size-weight" min="0" max="1" step="0.05" value="0.3">
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2 class="panel-title">Prévisualisation instantanée</h2>
+        <div class="parameter-grid">
+          <div class="mini-stat"><span>Étoiles</span><strong id="stat-stars">—</strong></div>
+          <div class="mini-stat"><span>Paires éligibles</span><strong id="stat-pairs">—</strong></div>
+          <div class="mini-stat"><span>50 essais</span><strong id="stat-preview">—</strong></div>
+          <div class="mini-stat"><span>Arête modèle</span><strong id="stat-edge">—</strong></div>
+        </div>
+        <div class="explain"><span class="step-index">1</span><span><b>Filtre bleu :</b> longueur de paire comprise dans l’échelle choisie.</span></div>
+        <div class="explain"><span class="step-index">2</span><span><b>Vert / rouge :</b> les 50 premières orientations trouvent, ou non, toutes les autres étoiles dans la tolérance.</span></div>
+        <div class="explain"><span class="step-index">3</span><span><b>Lecture :</b> chaque prédiction est testée étoile par étoile, dans le même ordre que l’éditeur.</span></div>
+      </section>
+    </aside>
+
+    <section class="stage" id="stage" aria-label="Carte plane de l’intégralité du ciel">
+      <canvas id="sky-canvas"></canvas>
+      <div class="stage-shade"></div>
+      <div class="map-badge">
+        <strong>Tout le ciel · projection polaire plane</strong>
+        <span>Ascension droite autour du disque · déclinaison +90° au centre, −90° au bord</span>
+      </div>
+      <div class="legend" aria-label="Légende">
+        <div class="legend-row"><span class="legend-mark dot" style="background:#fff"></span> Étoile du catalogue</div>
+        <div class="legend-row"><span class="legend-mark" style="background:#38bdf8"></span> Paire à l’échelle</div>
+        <div class="legend-row"><span class="legend-mark" style="background:#34d399"></span> Essai valide</div>
+        <div class="legend-row"><span class="legend-mark" style="background:#fb7185"></span> Essai rejeté</div>
+        <div class="legend-row"><span class="legend-mark" style="background:#a78bfa"></span> Forme de l’éditeur</div>
+      </div>
+      <div class="loading visible" id="loading">
+        <div class="loading-card"><span class="pulse"></span><span id="loading-text">Chargement du catalogue…</span></div>
+      </div>
+
+      <div class="playback" aria-label="Lecture de l’algorithme">
+        <div class="playback-top">
+          <div class="transport">
+            <button type="button" class="icon-btn" id="btn-reset" title="Revenir au début" aria-label="Revenir au début">↺</button>
+            <button type="button" class="icon-btn primary" id="btn-play"><span id="play-icon">▶</span><span id="play-label">Lancer</span></button>
+            <button type="button" class="icon-btn" id="btn-step" title="Étape suivante" aria-label="Étape suivante">›</button>
+          </div>
+          <div class="play-info" aria-live="polite">
+            <strong id="play-title">Prévisualisation en cours…</strong>
+            <span id="play-detail">Les paramètres recalculent les paires en direct.</span>
+          </div>
+          <select class="speed" id="speed" aria-label="Vitesse de lecture">
+            <option value="0.5">0,5×</option>
+            <option value="1" selected>1×</option>
+            <option value="2">2×</option>
+            <option value="4">4×</option>
+            <option value="8">8×</option>
+            <option value="16">16×</option>
+          </select>
+          <div class="zoom-control">
+            <span>Zoom</span>
+            <input type="range" id="zoom" min="1" max="12" step="0.25" value="4" aria-label="Zoom de suivi">
+            <span id="zoom-value">×4</span>
+          </div>
+        </div>
+        <div class="progress-track"><div class="progress-fill" id="play-progress"></div></div>
+      </div>
+    </section>
+  </main>
+
+  <script src="../lib/d3.min.js"></script>
+  <script src="../lib/d3.geo.projection.min.js"></script>
+  <script src="../celestial.min.js"></script>
+  <script src="matching-lab.js"></script>
+</body>
+</html>
